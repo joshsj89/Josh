@@ -78,7 +78,10 @@ void shell_loop(void)
         char *line = read_line();
 
         if (line == NULL) // Exit the loop on EOF or error
+        {
+            printf("\n");
             break;
+        }
 
         printf("You entered: %s\n", line);
 
