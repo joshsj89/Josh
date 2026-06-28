@@ -71,10 +71,10 @@ char **parse_line(char *line)
     tokens[position] = NULL; // Null-terminate the array of tokens
 
     // Print the tokens for debugging purposes
-    for (int i = 0; i < position; i++)
-    {
-        printf("Token %d: %s\n", i, tokens[i]);
-    }
+    // for (int i = 0; i < position; i++)
+    // {
+    //     printf("Token %d: %s\n", i, tokens[i]);
+    // }
 
     return tokens;
 }

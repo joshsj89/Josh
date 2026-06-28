@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include "execute.h"
 #include "parser.h"
 #include "shell.h"
 
@@ -85,6 +86,8 @@ void shell_loop(void)
         }
 
         char **tokens = parse_line(line); // Parse the input line into tokens
+
+        execute_command(tokens); // Execute the parsed command
 
         free_tokens(tokens); // Free the memory allocated for tokens
         free(line); // Free the memory allocated by getline
