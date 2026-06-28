@@ -2,7 +2,8 @@ CC = gcc
 CFLAGS = -g -Wall -Wextra
 TARGET = josh
 SRC = src/main.c \
-		src/shell.c
+		src/shell.c \
+		src/parser.c
 
 OBJ = $(SRC:.c=.o)
 

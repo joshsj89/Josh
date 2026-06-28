@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include "parser.h"
 #include "shell.h"
 
 /* 
@@ -83,8 +84,9 @@ void shell_loop(void)
             break;
         }
 
-        printf("You entered: %s\n", line);
+        char **tokens = parse_line(line); // Parse the input line into tokens
 
+        free_tokens(tokens); // Free the memory allocated for tokens
         free(line); // Free the memory allocated by getline
     }
 }
