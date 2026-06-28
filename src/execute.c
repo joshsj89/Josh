@@ -3,6 +3,9 @@
     * ----------------
     * This file contains the implementation of the execute_command function,
     * which is responsible for executing commands with their respective arguments.
+    * 
+    * TODO:
+    * - Implement support for input/output redirection, piping, and background jobs (&).
 */
 
 #include <stdio.h>
@@ -10,6 +13,8 @@
 #include <sys/types.h> // for pid_t
 #include <sys/wait.h> // for waitpid
 #include <unistd.h> // for fork, execvp
+#include "builtins.h"
+#include "execute.h"
 
 /*
  * Function: execute_command
@@ -32,6 +37,11 @@ void execute_command(char **args)
     if (args == NULL || args[0] == NULL)
     {
         return; // No command entered, return without doing anything
+    }
+
+    if (execute_builtin(args)) // Check if the command is a built-in command
+    {
+        return; // Built-in command executed, return without creating a child process
     }
 
     // Create a child process to execute the command

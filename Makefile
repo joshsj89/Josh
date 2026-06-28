@@ -4,7 +4,8 @@ TARGET = josh
 SRC = src/main.c \
 		src/shell.c \
 		src/parser.c \
-		src/execute.c
+		src/execute.c \
+		src/builtins.c
 
 OBJ = $(SRC:.c=.o)
 
