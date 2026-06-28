@@ -1,0 +1,2 @@
+# Josh (Josh Shell)
+Josh is a shell written in C that provides a command-line interface for users to interact with the operating system. It supports basic shell functionalities such as executing commands, handling input/output redirection, and managing processes.
