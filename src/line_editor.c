@@ -9,7 +9,6 @@
  *      - Implement tab completion
  *      - Implement forward delete (DEL key)
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
- *      - Implement Ctrl+W to delete the word before the cursor
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
  *      - Implement Ctrl+T to transpose the character before the cursor with the character at the cursor
@@ -350,6 +349,21 @@ char *line_editor_read(void)
         {
             const char *next_command = history_next(); // Get the next command from history
             handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
+        }
+        else if (c == ctrl_key('w')) // Check for Ctrl+W (delete word before cursor)
+        {
+            if (cursor_position > 0) // Ensure there is a word to delete
+            {
+                size_t new_cursor_position = cursor_position;
+                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] == ' ') new_cursor_position--; // Skip spaces
+                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] != ' ') new_cursor_position--; // Find start of word
+
+                memmove(buffer + new_cursor_position, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the left (+1 includes null terminator)
+                length -= (cursor_position - new_cursor_position); // Update length of input line
+                cursor_position = new_cursor_position; // Update cursor position
+
+                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            }
         }
     }
 
