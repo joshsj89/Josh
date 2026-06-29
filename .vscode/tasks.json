@@ -1,0 +1,24 @@
+{
+    "tasks": [
+        {
+            "label": "Build with Makefile",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                // "clean",
+                // "all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}" // set the working directory to the workspace folder
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+    ],
+    "version": "2.0.0"
+}
