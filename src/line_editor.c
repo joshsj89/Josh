@@ -13,7 +13,6 @@
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
  *      - Implement Ctrl+T to transpose the character before the cursor with the character at the cursor
- *      - Implement Ctrl+H to delete the character before the cursor (backspace)
  */
 
 #include <stdio.h>
@@ -220,7 +219,7 @@ char *line_editor_read(void)
             buffer[length] = '\0'; // Null-terminate the string
             break;                 // Exit the loop
         }
-        else if (c == 127 || c == 8) // Check for delete or backspace character
+        else if (c == 127 || c == 8 || c == ctrl_key('h')) // Check for delete or backspace character
         {
             if (cursor_position > 0) // Ensure the cursor is not at the beginning of the line
             {
