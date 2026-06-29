@@ -181,6 +181,93 @@ static void move_cursor_right(size_t *cursor_position, size_t length)
 }
 
 /*
+ * Function: delete_backward
+ * -------------------------
+ * Deletes the character before the cursor in the input line.
+ *
+ * This function checks if the cursor is not at the beginning of the line and deletes the character before it if possible.
+ *
+ * Parameters:
+ *   buffer          - The input buffer containing the characters.
+ *   length          - Pointer to the current length of the input line.
+ *   cursor_position - Pointer to the current cursor position in the input line.
+ */
+static void delete_backward(char *buffer, size_t *length, size_t *cursor_position)
+{
+    if (*cursor_position > 0) // Ensure the cursor is not at the beginning of the line
+    {
+        memmove(buffer + *cursor_position - 1, buffer + *cursor_position, *length - *cursor_position + 1); // Shift characters after cursor to the left (+1 includes the null terminator)
+        (*cursor_position)--; // Move the cursor position to the left
+        (*length)--; // Decrease the length of the input line
+
+        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    }
+}
+
+/*
+ * Function: delete_forward
+ * -------------------------
+ * Deletes the character after the cursor in the input line.
+ *
+ * This function checks if the cursor is not at the end of the line and deletes the character after it if possible.
+ *
+ * Parameters:
+ *   buffer          - The input buffer containing the characters.
+ *   length          - Pointer to the current length of the input line.
+ *   cursor_position - Pointer to the current cursor position in the input line.
+ */
+static void delete_forward(char *buffer, size_t *length, size_t *cursor_position)
+{
+    if (*cursor_position < *length) // Ensure the cursor is not at the end of the line
+    {
+        memmove(buffer + *cursor_position, buffer + *cursor_position + 1, *length - *cursor_position); // Shift characters after cursor to the left
+        (*length)--; // Decrease the length of the input line
+
+        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    }
+}
+
+/*
+ * Function: insert_character
+ * --------------------------
+ * Inserts a character at the current cursor position in the input line.
+ *
+ * This function checks if the buffer needs to be resized, shifts characters after the cursor to the right,
+ * inserts the new character, and updates the cursor position and length of the input line.
+ *
+ * Parameters:
+ *   buffer          - The input buffer containing the characters.
+ *   length          - Pointer to the current length of the input line.
+ *   cursor_position - Pointer to the current cursor position in the input line.
+ *   buffer_size     - Pointer to the size of the input buffer.
+ *   c               - The character to insert at the cursor position.
+ */
+static void insert_character(char *buffer, size_t *length, size_t *cursor_position, size_t *buffer_size, unsigned char c)
+{
+    if (*length + 1 >= *buffer_size) // Check if buffer needs to be resized
+    {
+        *buffer_size *= 2; // Double the buffer size
+        char *new_buffer = realloc(buffer, *buffer_size); // Reallocate memory for the new buffer size
+        if (new_buffer == NULL) // Check for memory allocation failure
+        {
+            fprintf(stderr, "Memory allocation failed\n");
+            free(buffer); // Free the old buffer to prevent memory leak
+            return; // Return to indicate failure
+        }
+        buffer = new_buffer; // Update the buffer pointer to the new buffer
+    }
+
+    memmove(buffer + *cursor_position + 1, buffer + *cursor_position, *length - *cursor_position); // Shift characters after cursor to the right
+    buffer[*cursor_position] = c; // Insert the new character at the cursor position
+    (*cursor_position)++;          // Move the cursor position to the right
+    (*length)++;                   // Increase the length of the input line
+
+    buffer[*length] = '\0'; // Null-terminate the string
+
+    redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+}
+
+/*
  * Function: line_editor_read
  * ---------------------
  * Reads a line of input from the standard input.
@@ -219,38 +306,11 @@ char *line_editor_read(void)
         }
         else if (c == 127 || c == 8 || c == ctrl_key('h')) // Check for delete or backspace character
         {
-            if (cursor_position > 0) // Ensure the cursor is not at the beginning of the line
-            {
-                memmove(buffer + cursor_position - 1, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the left (+1 includes the null terminator)
-                cursor_position--; // Move the cursor position to the left
-                length--; // Decrease the length of the input line
-
-                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
-            }
+            delete_backward(buffer, &length, &cursor_position);
         }
         else if (c >= 32 && c <= 126) // Check for printable characters
         {
-            if (length + 1 >= buffer_size) // Check if buffer needs to be resized
-            {
-                buffer_size *= 2;                                // Double the buffer size
-                char *new_buffer = realloc(buffer, buffer_size); // Reallocate memory for the new buffer size
-                if (new_buffer == NULL)                          // Check for memory allocation failure
-                {
-                    fprintf(stderr, "Memory allocation failed\n");
-                    free(buffer); // Free the old buffer to prevent memory leak
-                    return NULL;  // Return NULL to indicate failure
-                }
-                buffer = new_buffer; // Update the buffer pointer to the new buffer
-            }
-            
-            memmove(buffer + cursor_position + 1, buffer + cursor_position, length - cursor_position); // Shift characters after cursor to the right
-            buffer[cursor_position] = c; // Insert the new character at the cursor position
-            cursor_position++; // Move the cursor position to the right
-            length++; // Increase the length of the input line
-
-            buffer[length] = '\0'; // Null-terminate the string
-
-            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            insert_character(buffer, &length, &cursor_position, &buffer_size, c); // Insert the character into the buffer
         }
         else if (c == ctrl_key('d')) // Check for Ctrl+D (EOF)
         {
@@ -258,6 +318,10 @@ char *line_editor_read(void)
             {
                 buffer = "exit";
                 break;
+            }
+            else // If the input line is not empty, forward delete
+            {
+                delete_forward(buffer, &length, &cursor_position); // Delete the character at the cursor position
             }
         }
         else if (c == ctrl_key('c')) // Check for Ctrl+C (SIGINT)
@@ -297,6 +361,12 @@ char *line_editor_read(void)
                     case 'H': // Home key
                         cursor_position = 0; // Move cursor to the beginning of the line
                         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        break;
+                    case '3': // Delete key (ESC [ 3 ~)
+                        unsigned char tilde;
+                        if (read(STDIN_FILENO, &tilde, 1) != 1) break; // Read the next character
+                        if (tilde == '~') // Check for the tilde character
+                            delete_forward(buffer, &length, &cursor_position); // Delete the character at the cursor position
                         break;
                     default:
                         break;
