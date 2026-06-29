@@ -9,7 +9,6 @@
  *      - Implement tab completion
  *      - Implement forward delete (DEL key)
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
- *      - Implement Ctrl+K to delete from cursor to end of line
  *      - Implement Ctrl+W to delete the word before the cursor
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
@@ -328,7 +327,13 @@ char *line_editor_read(void)
             cursor_position = 0; // Move cursor to the beginning of the line
             buffer[0] = '\0'; // Null-terminate the string
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
-        }       
+        }
+        else if (c == ctrl_key('k')) // Check for Ctrl+K (delete from cursor to end of line)
+        {
+            buffer[cursor_position] = '\0'; // Null-terminate the string at the cursor position
+            length = cursor_position; // Update the length of the input line
+            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+        }
     }
 
     // Disable raw mode for terminal input
