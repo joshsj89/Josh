@@ -341,6 +341,16 @@ char *line_editor_read(void)
         {
             move_cursor_right(&cursor_position, length); // Move the cursor right
         }
+        else if (c == ctrl_key('p')) // Check for Ctrl+P (previous command in history)
+        {
+            const char *prev_command = history_previous(); // Get the previous command from history
+            handle_up_down(prev_command, &length, &cursor_position, buffer, buffer_size); // Handle the previous command
+        }
+        else if (c == ctrl_key('n')) // Check for Ctrl+N (next command in history)
+        {
+            const char *next_command = history_next(); // Get the next command from history
+            handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
+        }
     }
 
     // Disable raw mode for terminal input
