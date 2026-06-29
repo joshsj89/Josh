@@ -11,8 +11,6 @@
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
  *      - Implement Ctrl+U to clear the line
  *      - Implement Ctrl+K to delete from cursor to end of line
- *      - Implement Home and Ctrl+A to move cursor to the beginning of the line
- *      - Implement End and Ctrl+E to move cursor to the end of the line
  *      - Implement Ctrl+W to delete the word before the cursor
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+L to clear the screen and redraw the line
@@ -298,10 +296,28 @@ char *line_editor_read(void)
                     case 'D': // Left arrow key
                         move_cursor_left(&cursor_position); // Move the cursor left
                         break;
+                    case 'F': // End key
+                        cursor_position = length; // Move cursor to the end of the line
+                        redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        break;
+                    case 'H': // Home key
+                        cursor_position = 0; // Move cursor to the beginning of the line
+                        redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        break;
                     default:
                         break;
                 }
             }
+        }
+        else if (c == ctrl_key('a')) // Check for Ctrl+A (move cursor to beginning of line)
+        {
+            cursor_position = 0; // Move cursor to the beginning of the line
+            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+        }
+        else if (c == ctrl_key('e')) // Check for Ctrl+E (move cursor to end of line)
+        {
+            cursor_position = length; // Move cursor to the end of the line
+            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
         }
     }
 
