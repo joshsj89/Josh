@@ -11,7 +11,6 @@
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
- *      - Implement Ctrl+T to transpose the character before the cursor with the character at the cursor
  */
 
 #include <stdio.h>
@@ -361,6 +360,26 @@ char *line_editor_read(void)
                 memmove(buffer + new_cursor_position, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the left (+1 includes null terminator)
                 length -= (cursor_position - new_cursor_position); // Update length of input line
                 cursor_position = new_cursor_position; // Update cursor position
+
+                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            }
+        }
+        else if (c == ctrl_key('t')) // Check for Ctrl+T (transpose characters)
+        {
+            if (cursor_position > 0 && cursor_position < length) // Ensure there are characters to transpose
+            {
+                char temp = buffer[cursor_position - 1]; // Store the character before the cursor
+                buffer[cursor_position - 1] = buffer[cursor_position]; // Swap with the character at the cursor
+                buffer[cursor_position] = temp; // Complete the swap
+
+                cursor_position++; // Move the cursor to the right after transposing
+                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            }
+            else if (cursor_position == length && length > 1) // If cursor is at the end, transpose the last two characters
+            {
+                char temp = buffer[length - 2]; // Store the second last character
+                buffer[length - 2] = buffer[length - 1]; // Swap with the last character
+                buffer[length - 1] = temp; // Complete the swap
 
                 redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
             }
