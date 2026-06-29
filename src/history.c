@@ -4,7 +4,6 @@
  *      This file contains the implementation of command history functionality for the shell.
  *
  *      TODO:
- *       - Turn fixed-size array into a circular buffer to allow for an arbitrary number of commands in history.
  *       - Change data structure from a fixed-size array to a dynamic array using realloc to allow for an arbitrary number of commands in history.
  *       - Add history expansion functionality (e.g., !n, !!, !string) to allow users to recall and execute previous commands.
  *       - Implement persistent history storage by saving command history to a file and loading it on shell startup.
@@ -19,6 +18,7 @@
 #define HISTORY_SIZE 100 // Maximum number of commands to store in history
 
 static char *history[HISTORY_SIZE]; // Array to store command history
+static int history_start = 0; // Index of the oldest command in history
 static int history_count = 0; // Current number of commands in history
 
 /*
@@ -30,6 +30,7 @@ static int history_count = 0; // Current number of commands in history
  */
 void history_init(void)
 {
+    history_start = 0;
     history_count = 0;
 }
 
@@ -55,16 +56,22 @@ void history_add(const char *line)
     if (history_count >= HISTORY_SIZE) // if the history is full
     {
         // Remove the oldest command from history
-        free(history[0]);
-        for (int i = 0; i < HISTORY_SIZE - 1; i++) // Shift all commands to the left
-        {
-            history[i] = history[i + 1];
-        }
+        free(history[history_start]);
+        history_start = (history_start + 1) % HISTORY_SIZE;
         history_count--;
     }
 
-    // Add the new command to the end of history
-    history[history_count] = strdup(line);
+    // Add the new command to the history
+    char *new_command = strdup(line); // Duplicate the command string
+
+    if (new_command == NULL) // Check for memory allocation failure
+    {
+        fprintf(stderr, "Allocation error\n");
+        // exit(EXIT_FAILURE);
+        return; // Return without adding the command to history
+    }
+    history[(history_start + history_count) % HISTORY_SIZE] = new_command; // Store the duplicated command in history
+
     history_count++;
 }
 
@@ -79,7 +86,10 @@ void history_add(const char *line)
 void history_print(void)
 {
     for (int i = 0; i < history_count; i++)
-        printf("%d  %s\n", i + 1, history[i]); // Print the command index and command
+    {
+        int index = (history_start + i) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
+        printf("%d  %s\n", i + 1, history[index]); // Print the command index and command
+    }
 }
 
 /**
@@ -94,7 +104,8 @@ void history_destroy(void)
 {
     for (int i = 0; i < history_count; i++)
     {
-        free(history[i]);
+        int index = (history_start + i) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
+        free(history[index]);
     }
 
     history_count = 0;
