@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include "execute.h"
+#include "history.h"
 #include "parser.h"
 #include "shell.h"
 
@@ -73,6 +74,8 @@ static char *read_line(void)
  */
 void shell_loop(void)
 {
+    history_init(); // Initialize the command history
+
     while (1)
     {
         print_prompt();
@@ -85,6 +88,8 @@ void shell_loop(void)
             break;
         }
 
+        history_add(line); // Add the line to command history
+
         char **tokens = parse_line(line); // Parse the input line into tokens
 
         execute_command(tokens); // Execute the parsed command
@@ -92,4 +97,6 @@ void shell_loop(void)
         free_tokens(tokens); // Free the memory allocated for tokens
         free(line); // Free the memory allocated by getline
     }
+
+    history_destroy(); // Clean up the command history before exiting
 }

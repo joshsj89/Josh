@@ -10,6 +10,7 @@
 #include <string.h>
 #include <unistd.h> // for chdir
 #include "builtins.h"
+#include "history.h"
 
 /*
  * shell_cd - Change the current directory
@@ -67,7 +68,7 @@ int shell_exit(char **args)
  *   0 if the command is not a built-in
  * 
  * TODO:
- * - Add more built-in commands as needed (e.g., "help", "history", "jobs", "fg", "bg", "alias", "unalias", etc.)
+ * - Add more built-in commands as needed (e.g., "help", "jobs", "fg", "bg", "alias", "unalias", etc.)
  */
 int execute_builtin(char **args)
 {
@@ -83,6 +84,11 @@ int execute_builtin(char **args)
     else if (strcmp(args[0], "exit") == 0)
     {
         return shell_exit(args);
+    }
+    else if (strcmp(args[0], "history") == 0)
+    {
+        history_print();
+        return 1; // Indicate that the command was executed successfully
     }
 
     return 0; // Command is not a built-in

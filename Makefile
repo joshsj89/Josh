@@ -5,7 +5,8 @@ SRC = src/main.c \
 		src/shell.c \
 		src/parser.c \
 		src/execute.c \
-		src/builtins.c
+		src/builtins.c \
+		src/history.c
 
 OBJ = $(SRC:.c=.o)
 
