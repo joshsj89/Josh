@@ -13,7 +13,6 @@
  *      - Implement Ctrl+K to delete from cursor to end of line
  *      - Implement Ctrl+W to delete the word before the cursor
  *      - Implement Ctrl+Y to paste the last deleted text
- *      - Implement Ctrl+L to clear the screen and redraw the line
  *      - Implement Ctrl+R for reverse search in history
  *      - Implement Ctrl+T to transpose the character before the cursor with the character at the cursor
  *      - Implement Ctrl+H to delete the character before the cursor (backspace)
@@ -318,6 +317,11 @@ char *line_editor_read(void)
         {
             cursor_position = length; // Move cursor to the end of the line
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+        }
+        else if (c == ctrl_key('l')) // Check for Ctrl+L (clear screen)
+        {
+            printf("\033[H\033[J"); // ANSI escape code to clear the screen and move cursor to home position
+            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
         }
     }
 
