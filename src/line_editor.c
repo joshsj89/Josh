@@ -9,7 +9,6 @@
  *      - Implement tab completion
  *      - Implement forward delete (DEL key)
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
- *      - Implement Ctrl+U to clear the line
  *      - Implement Ctrl+K to delete from cursor to end of line
  *      - Implement Ctrl+W to delete the word before the cursor
  *      - Implement Ctrl+Y to paste the last deleted text
@@ -323,6 +322,13 @@ char *line_editor_read(void)
             printf("\033[H\033[J"); // ANSI escape code to clear the screen and move cursor to home position
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
         }
+        else if (c == ctrl_key('u')) // Check for Ctrl+U (clear line)
+        {
+            length = 0; // Clear the input line
+            cursor_position = 0; // Move cursor to the beginning of the line
+            buffer[0] = '\0'; // Null-terminate the string
+            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+        }       
     }
 
     // Disable raw mode for terminal input
