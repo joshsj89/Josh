@@ -16,7 +16,7 @@
  * Returns:
  *   0 on successful completion.
  */
-int main(int argc, char *argv[])
+int main(void)
 {
     shell_loop();
 
