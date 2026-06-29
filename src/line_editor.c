@@ -4,6 +4,21 @@
  *      This file contains the implementation of the line editor functionality for the shell.
  *      This file is responsible for reading characters, cursor movement, escape sequences,
  *      and other line editing features.
+ *      
+ *      TODO:
+ *      - Implement tab completion
+ *      - Implement forward delete (DEL key)
+ *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
+ *      - Implement Ctrl+U to clear the line
+ *      - Implement Ctrl+K to delete from cursor to end of line
+ *      - Implement Home and Ctrl+A to move cursor to the beginning of the line
+ *      - Implement End and Ctrl+E to move cursor to the end of the line
+ *      - Implement Ctrl+W to delete the word before the cursor
+ *      - Implement Ctrl+Y to paste the last deleted text
+ *      - Implement Ctrl+L to clear the screen and redraw the line
+ *      - Implement Ctrl+R for reverse search in history
+ *      - Implement Ctrl+T to transpose the character before the cursor with the character at the cursor
+ *      - Implement Ctrl+H to delete the character before the cursor (backspace)
  */
 
 #include <stdio.h>
@@ -13,6 +28,11 @@
 #include <unistd.h>
 #include "history.h"
 #include "line_editor.h"
+
+// #define CTRL_KEY(k) ((k) & 0x1f) // Macro to convert a character to its corresponding control key
+
+static const char *left_arrow = "\033[D";  // ANSI escape code for left arrow
+static const char *right_arrow = "\033[C"; // ANSI escape code for right arrow
 
 /* Structure to hold original terminal settings */
 struct termios orig_termios;
@@ -53,6 +73,38 @@ void disable_raw_mode()
 }
 
 /*
+ * Function: redraw_line
+ * ---------------------
+ * Redraws the current input line with the updated buffer and cursor position.
+ *
+ * This function clears the current line, prints the prompt, the buffer content,
+ * and moves the cursor to the correct position based on the cursor_position parameter.
+ *
+ * Parameters:
+ *   buffer          - The input buffer containing the characters.
+ *   length          - The current length of the input line.
+ *   cursor_position - The current cursor position in the input line.
+ */
+static void redraw_line(const char *buffer, size_t length, size_t cursor_position)
+{
+    // Clear the current line
+    printf("\r"); // Move cursor back to the beginning of the line
+    printf("\033[2K"); // ANSI escape code to clear the entire line
+
+    // Print the prompt
+    printf("josh> ");
+
+    // Print the buffer content
+    fwrite(buffer, 1, length, stdout);
+
+    // Move the cursor to the correct position
+    for (size_t i = length; i > cursor_position; i--)
+        printf("\b"); // Move cursor left to the desired position
+
+    fflush(stdout); // Flush the output buffer to ensure immediate display
+}
+
+/*
  * Function: handle_up_down
  * ------------------------
  * Handles the up and down arrow key navigation for command history.
@@ -63,24 +115,62 @@ void disable_raw_mode()
  * Parameters:
  *   next_command - The command to display (previous or next command from history).
  *   length       - Pointer to the current length of the input line.
+ *   cursor_position - Pointer to the current cursor position in the input line.
  *   buffer       - The input buffer to update with the command.
  *   buffer_size  - The size of the input buffer.
  */
-static void handle_up_down(const char *next_command, size_t *length, char *buffer, size_t buffer_size)
+static void handle_up_down(const char *next_command, size_t *length, size_t *cursor_position, char *buffer, size_t buffer_size)
 {
     if (next_command != NULL) // Check if there is a previous/next command
     {
-        // Clear the current line
-        while (*length > 0) // While there are characters in the current line
-        {
-            printf("\b \b"); // Move cursor back, print space, move cursor back again
-            (*length)--; // Decrease the length of the input line
-        }
         // Copy the previous/next command into the buffer
         snprintf(buffer, buffer_size, "%s", next_command); // Copy the previous/next command into the buffer
         *length = strlen(buffer); // Update the length of the input line
-        printf("%s", buffer); // Print the previous/next command to the terminal
+        *cursor_position = *length; // Move the cursor to the end of the line
+
+        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    }
+}
+
+/*
+ * Function: move_cursor_left
+ * --------------------------
+ * Moves the cursor one position to the left in the input line.
+ *
+ * This function checks if the cursor is not at the beginning of the line and moves it left if possible.
+ *
+ * Parameters:
+ *   cursor_position - Pointer to the current cursor position in the input line.
+ */
+static void move_cursor_left(size_t *cursor_position)
+{
+    if (*cursor_position > 0) // Ensure the cursor is not at the beginning
+    {
+        printf("%s", left_arrow); // Move cursor left
         fflush(stdout); // Flush the output buffer to ensure immediate display
+        (*cursor_position)--; // Decrease the cursor position
+    }
+}
+
+/*
+ * Function: move_cursor_right
+ * ---------------------------
+ * Moves the cursor one position to the right in the input line.
+ *
+ * This function checks if the cursor is not at the end of the line and moves it right if possible.
+ *
+ * Parameters:
+ *   cursor_position - Pointer to the current cursor position in the input line.
+ *   length          - The current length of the input line.
+ *   buffer          - The input buffer containing the characters.
+ */
+static void move_cursor_right(size_t *cursor_position, size_t length)
+{
+    if (*cursor_position < length) // Ensure the cursor is not at the end
+    {
+        printf("%s", right_arrow); // Move cursor right
+        fflush(stdout); // Flush the output buffer to ensure immediate display
+        (*cursor_position)++; // Increase the cursor position
     }
 }
 
@@ -112,6 +202,7 @@ char *line_editor_read(void)
 
     // Read characters from standard input
     size_t length = 0; // Current length of the input line
+    size_t cursor_position = 0; // Current cursor position in the input line
     unsigned char c; // Variable to hold the character read from input
     while (read(STDIN_FILENO, &c, 1) == 1) // Read one character at a time
     {
@@ -122,12 +213,13 @@ char *line_editor_read(void)
         }
         else if (c == 127 || c == 8) // Check for delete or backspace character
         {
-            if (length > 0) // Ensure there is something to delete
+            if (cursor_position > 0) // Ensure the cursor is not at the beginning of the line
             {
-                length--;              // Decrease the length of the input line
-                buffer[length] = '\0'; // Null-terminate the string
-                printf("\b \b");       // Move cursor back, print space, move cursor back again
-                fflush(stdout);        // Flush the output buffer to ensure immediate display
+                memmove(buffer + cursor_position - 1, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the left (+1 includes the null terminator)
+                cursor_position--; // Move the cursor position to the left
+                length--; // Decrease the length of the input line
+
+                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
             }
         }
         else if (c >= 32 && c <= 126) // Check for printable characters
@@ -145,10 +237,14 @@ char *line_editor_read(void)
                 buffer = new_buffer; // Update the buffer pointer to the new buffer
             }
             
-            buffer[length++] = c; // Add the character to the input line and increase length
+            memmove(buffer + cursor_position + 1, buffer + cursor_position, length - cursor_position); // Shift characters after cursor to the right
+            buffer[cursor_position] = c; // Insert the new character at the cursor position
+            cursor_position++; // Move the cursor position to the right
+            length++; // Increase the length of the input line
 
-            putchar(c); // Echo the character to the terminal
-            fflush(stdout); // Flush the output buffer to ensure immediate display
+            buffer[length] = '\0'; // Null-terminate the string
+
+            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
         }
         else if (c == 4) // Check for Ctrl+D (EOF)
         {
@@ -176,15 +272,17 @@ char *line_editor_read(void)
                 {
                     case 'A': // Up arrow key
                         const char *prev_command = history_previous(); // Get the previous command from history
-                        handle_up_down(prev_command, &length, buffer, buffer_size); // Handle the previous command
+                        handle_up_down(prev_command, &length, &cursor_position, buffer, buffer_size); // Handle the previous command
                         break;
                     case 'B': // Down arrow key
                         const char *next_command = history_next(); // Get the next command from history
-                        handle_up_down(next_command, &length, buffer, buffer_size); // Handle the next command
+                        handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
                         break;
                     case 'C': // Right arrow key
+                        move_cursor_right(&cursor_position, length); // Move the cursor right
                         break;
                     case 'D': // Left arrow key
+                        move_cursor_left(&cursor_position); // Move the cursor left
                         break;
                     default:
                         break;
