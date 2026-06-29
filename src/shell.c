@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include "execute.h"
 #include "history.h"
+#include "line_editor.h"
 #include "parser.h"
 #include "shell.h"
 
@@ -30,40 +31,6 @@ static void print_prompt(void)
 }
 
 /*
- * Function: read_line
- * ---------------------
- * Reads a line of input from the standard input.
- *
- * This function reads a line of input from the standard input and returns it as a dynamically allocated string.
- * It is responsible for allocating memory for the input string and removing the trailing newline character.
- *
- * Returns:
- *   A pointer to the dynamically allocated string containing the user input, or NULL on error or EOF.
- */
-static char *read_line(void)
-{
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t read;
-
-    read = getline(&line, &len, stdin);
-
-    if (read == -1) // Check for EOF or error
-    {
-        free(line); // Free the allocated memory on error
-        return NULL;
-    }
-
-    // Remove the trailing newline character if present
-    if (line[read - 1] == '\n')
-    {
-        line[read - 1] = '\0';
-    }
-
-    return line;
-}
-
-/*
  * Function: shell_loop
  * --------------------
  * Implements the main loop of the shell.
@@ -80,7 +47,7 @@ void shell_loop(void)
     {
         print_prompt();
 
-        char *line = read_line();
+        char *line = line_editor_read();
 
         if (line == NULL) // Exit the loop on EOF or error
         {
@@ -95,7 +62,7 @@ void shell_loop(void)
         execute_command(tokens); // Execute the parsed command
 
         free_tokens(tokens); // Free the memory allocated for tokens
-        free(line); // Free the memory allocated by getline
+        free(line); // Free the memory allocated by line_editor_read
     }
 
     history_destroy(); // Clean up the command history before exiting

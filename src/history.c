@@ -6,7 +6,6 @@
  *      TODO:
  *       - Change data structure from a fixed-size array to a dynamic array using realloc to allow for an arbitrary number of commands in history.
  *       - Add history expansion functionality (e.g., !n, !!, !string) to allow users to recall and execute previous commands.
- *       - Implement arrow key navigation for command history to allow users to navigate through previous commands using the up and down arrow keys.
  *       - Add support for command timestamps to allow users to see when commands were executed.
  */
 
@@ -20,6 +19,7 @@
 static char *history[HISTORY_SIZE]; // Array to store command history
 static int history_start = 0; // Index of the oldest command in history
 static int history_count = 0; // Current number of commands in history
+static int history_cursor = 0; // Cursor for navigating through history
 
 /**
  * Function: get_history_file
@@ -122,6 +122,7 @@ void history_init(void)
 {
     history_start = 0;
     history_count = 0;
+    history_cursor = 0;
 
     load_history();
 }
@@ -140,8 +141,6 @@ void history_init(void)
  *  command string since the input line might be deallocated by the caller. strdup allocates memory 
  *  for the new string, which should be freed when the history is destroyed.
  * 
- * TODO:
- *  - Implement a circular buffer or dynamic array to allow for an arbitrary number of commands in history.
  */
 void history_add(const char *line)
 {
@@ -203,4 +202,36 @@ void history_destroy(void)
     }
 
     history_count = 0;
+    history_cursor = 0;
+}
+
+const char *history_previous(void)
+{
+    if (history_count == 0) // If there is no history, return NULL
+        return NULL;
+
+    if (history_cursor < history_count) // If the cursor is not at the oldest command
+    {
+        history_cursor++; // Move the cursor to the previous command
+    }
+
+    int index = (history_start + history_count - history_cursor) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
+    return history[index]; // Return the previous command
+}
+
+const char *history_next(void)
+{
+    if (history_count == 0) // If there is no history, return NULL
+        return NULL;
+
+    if (history_cursor > 0) // If the cursor is not at the newest command
+    {
+        history_cursor--; // Move the cursor to the next command
+    }
+
+    if (history_cursor == 0) // If the cursor is at the newest command, return an empty string
+        return "";
+
+    int index = (history_start + history_count - history_cursor) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
+    return history[index]; // Return the next command
 }
