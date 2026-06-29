@@ -333,6 +333,14 @@ char *line_editor_read(void)
             length = cursor_position; // Update the length of the input line
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
         }
+        else if (c == ctrl_key('b')) // Check for Ctrl+B (move cursor left)
+        {
+            move_cursor_left(&cursor_position); // Move the cursor left
+        }
+        else if (c == ctrl_key('f')) // Check for Ctrl+F (move cursor right)
+        {
+            move_cursor_right(&cursor_position, length); // Move the cursor right
+        }
     }
 
     // Disable raw mode for terminal input
