@@ -29,8 +29,6 @@
 #include "history.h"
 #include "line_editor.h"
 
-// #define CTRL_KEY(k) ((k) & 0x1f) // Macro to convert a character to its corresponding control key
-
 static const char *left_arrow = "\033[D";  // ANSI escape code for left arrow
 static const char *right_arrow = "\033[C"; // ANSI escape code for right arrow
 
@@ -70,6 +68,22 @@ void disable_raw_mode()
 {
     // Restore original settings before exiting
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
+}
+
+/*
+ * Function: ctrl_key
+ * ------------------
+ * Converts a character to its corresponding control key.
+ *
+ * Parameters:
+ *   k - The character to convert.
+ *
+ * Returns:
+ *   The corresponding control key.
+ */
+static inline int ctrl_key(int k)
+{
+    return k & 0x1f; // Convert a character to its corresponding control key
 }
 
 /*
@@ -246,7 +260,7 @@ char *line_editor_read(void)
 
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
         }
-        else if (c == 4) // Check for Ctrl+D (EOF)
+        else if (c == ctrl_key('d')) // Check for Ctrl+D (EOF)
         {
             if (length == 0) // If the input line is empty, treat it as EOF
             {
@@ -254,7 +268,7 @@ char *line_editor_read(void)
                 break;
             }
         }
-        else if (c == 3) // Check for Ctrl+C (SIGINT)
+        else if (c == ctrl_key('c')) // Check for Ctrl+C (SIGINT)
         {
             free(buffer); // Free the allocated buffer
             return NULL; // Return NULL to indicate that the input was interrupted
