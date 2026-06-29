@@ -6,7 +6,6 @@
  *      TODO:
  *       - Change data structure from a fixed-size array to a dynamic array using realloc to allow for an arbitrary number of commands in history.
  *       - Add history expansion functionality (e.g., !n, !!, !string) to allow users to recall and execute previous commands.
- *       - Implement persistent history storage by saving command history to a file and loading it on shell startup.
  *       - Implement arrow key navigation for command history to allow users to navigate through previous commands using the up and down arrow keys.
  *       - Add support for command timestamps to allow users to see when commands were executed.
  */
@@ -14,12 +13,103 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "history.h"
 
 #define HISTORY_SIZE 100 // Maximum number of commands to store in history
 
 static char *history[HISTORY_SIZE]; // Array to store command history
 static int history_start = 0; // Index of the oldest command in history
 static int history_count = 0; // Current number of commands in history
+
+/**
+ * Function: get_history_file
+ * --------------------------
+ * Returns the path to the history file.
+ */
+static const char *get_history_file(void)
+{
+    const char *home = getenv("HOME");
+
+    if (home == NULL)
+    {
+        fprintf(stderr, "Could not get HOME environment variable\n");
+        return "/tmp/.josh_history"; // Fallback to a temporary file if HOME is not set
+    }
+
+    // Construct the path to the history file
+    static char history_file[1024]; // static to ensure it persists after the function returns
+    snprintf(history_file, sizeof(history_file), "%s/.josh_history", home);
+
+    return history_file;
+}
+
+/*
+ * Function: load_history
+ * ----------------------
+ * Loads command history from a file.
+ */
+static void load_history(void)
+{
+    const char *history_file = get_history_file();
+
+    if (history_file == NULL)
+    {
+        fprintf(stderr, "Could not get history file path\n");
+        return;
+    }
+
+    FILE *file = fopen(history_file, "r"); // Open the history file for reading
+    if (file == NULL) // If the file does not exist, return without loading history
+        return;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), file)) // Read each line from the history file
+    {
+        // Remove the trailing newline character
+        line[strcspn(line, "\n")] = '\0';
+        history_add(line);
+    }
+
+    if (fclose(file) != 0) // Check for errors when closing the file
+    {
+        fprintf(stderr, "Error closing history file\n");
+    }
+
+}
+
+/**
+ * Function: save_history
+ * ----------------------
+ * Saves command history to a file.
+ */
+static void save_history(void)
+{
+    const char *history_file = get_history_file();
+
+    if (history_file == NULL)
+    {
+        fprintf(stderr, "Could not get history file path\n");
+        return;
+    }
+
+    FILE *file = fopen(history_file, "w"); // Open the history file for writing
+    if (file == NULL)
+    {
+        fprintf(stderr, "Could not open history file for writing\n");
+        return;
+    }
+
+    for (int i = 0; i < history_count; i++) // Iterate through the command history
+    {
+        int index = (history_start + i) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
+        fprintf(file, "%s\n", history[index]); // Write each command to the history file
+    }
+
+    if (fclose(file) != 0) // Check for errors when closing the file
+    {
+        fprintf(stderr, "Error closing history file\n");
+    }
+}
 
 /*
  * Function: history_init
@@ -32,6 +122,8 @@ void history_init(void)
 {
     history_start = 0;
     history_count = 0;
+
+    load_history();
 }
 
 /**
@@ -102,6 +194,8 @@ void history_print(void)
  */
 void history_destroy(void)
 {
+    save_history(); // Save the history to a file before destroying it
+
     for (int i = 0; i < history_count; i++)
     {
         int index = (history_start + i) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
