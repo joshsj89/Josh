@@ -7,7 +7,6 @@
  *      
  *      TODO:
  *      - Implement tab completion
- *      - Implement forward delete (DEL key)
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
@@ -18,6 +17,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include "completion.h"
 #include "history.h"
 #include "line_editor.h"
 
@@ -91,7 +91,7 @@ static inline int ctrl_key(int k)
  *   length          - The current length of the input line.
  *   cursor_position - The current cursor position in the input line.
  */
-static void redraw_line(const char *buffer, size_t length, size_t cursor_position)
+void redraw_line(const char *buffer, size_t length, size_t cursor_position)
 {
     // Clear the current line
     printf("\r"); // Move cursor back to the beginning of the line
@@ -328,6 +328,10 @@ char *line_editor_read(void)
         {
             free(buffer); // Free the allocated buffer
             return NULL; // Return NULL to indicate that the input was interrupted
+        }
+        else if (c == '\t') // Check for tab character (tab completion)
+        {
+            tab_complete(buffer, &length, &cursor_position, &buffer_size); // Handle tab completion
         }
         else if (c == 27) // Check for escape character (start of escape sequence)
         {

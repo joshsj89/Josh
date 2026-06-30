@@ -7,7 +7,8 @@ SRC = src/main.c \
 		src/execute.c \
 		src/builtins.c \
 		src/history.c \
-		src/line_editor.c
+		src/line_editor.c \
+		src/completion.c
 
 OBJ = $(SRC:.c=.o)
 
