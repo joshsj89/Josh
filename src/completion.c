@@ -290,9 +290,8 @@ static void print_matches(char matches[][256], int match_count)
  *   buffer - The input buffer containing the line of text.
  *   length - Pointer to the current length of the input line.
  *   cursor_position - Pointer to the current cursor position in the input line.
- *   buffer_size - The size of the input buffer.
  */
-static void complete_command(char *buffer, size_t *length, size_t *cursor_position, size_t buffer_size)
+static void complete_command(char *buffer, size_t *length, size_t *cursor_position)
 {
     char word[256]; // Buffer to hold the current word
     size_t word_length;
@@ -354,12 +353,11 @@ char *complete_line(const char *buffer, size_t cursor_position)
  *   buffer          - The input buffer containing the line of text.
  *   length          - Pointer to the current length of the input line.
  *   cursor_position - Pointer to the current cursor position in the input line.
- *   buffer_size     - Pointer to the size of the input buffer.
  */
-void tab_complete(char *buffer, size_t *length, size_t *cursor_position, size_t *buffer_size)
+void tab_complete(char *buffer, size_t *length, size_t *cursor_position)
 {
     if (is_command_position(buffer, *cursor_position))
-        complete_command(buffer, length, cursor_position, *buffer_size);
+        complete_command(buffer, length, cursor_position);
 }
 
 void completion_reset(void)

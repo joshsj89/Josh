@@ -334,7 +334,7 @@ char *line_editor_read(void)
         }
         else if (c == '\t') // Check for tab character (tab completion)
         {
-            tab_complete(buffer, &length, &cursor_position, &buffer_size); // Handle tab completion
+            tab_complete(buffer, &length, &cursor_position); // Handle tab completion
         }
         else if (c == 27) // Check for escape character (start of escape sequence)
         {
