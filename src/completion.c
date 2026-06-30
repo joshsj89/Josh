@@ -10,6 +10,7 @@
 #include <stdio.h> // For snprintf
 #include <stdlib.h> // For free and getenv
 #include <string.h>
+#include <sys/ioctl.h> // For terminal size
 #include <unistd.h> // For access()
 #include "completion.h"
 
@@ -17,6 +18,8 @@
 
 static int previous_was_tab = 0; // Flag to track if the previous key pressed was a tab
 static char last_prefix[256] = ""; // Buffer to store the last prefix used for completion
+
+struct winsize ws; // Structure to hold terminal window size
 
 /*
  * Function: is_command_position
@@ -264,6 +267,56 @@ static size_t longest_common_prefix(char matches[][256], int count)
     return prefix_length;
 }
 
+/**
+ * Function: print_matches
+ * -----------------------
+ * Prints the list of matching commands in a formatted grid.
+ *
+ * Parameters:
+ *   matches - An array of strings representing the matching commands.
+ *   match_count - The number of matching commands.
+ */
+static void print_matches(char matches[][256], int match_count)
+{
+    int columns = 0;
+    
+    // Get the terminal size
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
+        columns = 80; // Default to 80 columns if ioctl fails
+    else
+        columns = ws.ws_col; // Get the number of columns from the terminal size
+
+    // Find the longest match width to format the output
+    size_t max_width = 0;
+    for (int i = 0; i < match_count; i++)
+    {
+        size_t width = strlen(matches[i]);
+        if (width > max_width)
+            max_width = width;
+    }
+
+    // Compute cell width
+    size_t cell_width = max_width + 2; // Add padding for spacing
+
+    // Compute number of columns that can fit in the terminal
+    int num_columns = columns / cell_width;
+
+    if (num_columns == 0) // Ensure at least one column is printed
+        num_columns = 1;
+
+    printf("\n"); // Print a newline to separate the matches
+    for (int i = 0; i < match_count; i++)
+    {
+        printf("%-*s", (int)max_width, matches[i]); // Print each matching command with padding
+
+        if ((i + 1) % num_columns == 0) // Check if the current row is filled
+            printf("\n"); // Print a newline to start a new row
+    }
+
+    if (match_count % num_columns != 0) // If the last row is not filled, print a newline
+        printf("\n"); // Print a newline after the matches
+}
+
 /*
  * Function: complete_command
  * --------------------------
@@ -290,9 +343,8 @@ static void complete_command(char *buffer, size_t *length, size_t *cursor_positi
     if (previous_was_tab && strcmp(last_prefix, word) == 0) // If the previous key was a tab and the prefix hasn't changed
     {
         printf("\n"); // Print a newline to separate the matches
-        for (int i = 0; i < match_count; i++)
-            printf("%s  ", matches[i]); // Print each matching command
-        printf("\n"); // Print a newline after the matches
+        
+        print_matches(matches, match_count); // Print the matching commands in a formatted manner
 
         redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
     }
