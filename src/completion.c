@@ -6,7 +6,7 @@
  */
 
 #include <dirent.h> // For directory operations
-#include <linux/limits.h> // For PATH_MAX
+#include <limits.h> // For PATH_MAX
 #include <stdio.h> // For snprintf
 #include <stdlib.h> // For free and getenv
 #include <string.h>
@@ -35,6 +35,13 @@ struct winsize ws; // Structure to hold terminal window size
  */
 static int compare_strings(const void *a, const void *b)
 {
+    // Reorder "./" to be in front of "../"
+
+    if (strcmp((const char *)a, "./") == 0)
+        return -1; // "./" should come before any other string
+    if (strcmp((const char *)b, "./") == 0)
+        return 1; // Any other string should come after "./"
+
     return strcmp((const char *)a, (const char *)b);
 }
 
@@ -164,6 +171,66 @@ static int find_command_matches(const char *prefix, char matches[][256])
 }
 
 /*
+ * Function: find_filename_matches
+ * -------------------------------
+ * Finds all filenames in the current directory that match the given prefix.
+ *
+ * Parameters:
+ *   prefix - The prefix to match filenames against.
+ *   matches - An array to store the matching filenames.
+ *
+ * Returns:
+ *   The number of matching filenames found.
+ */
+static int find_filename_matches(const char *prefix, char matches[][256])
+{
+    DIR *dp = opendir("."); // Open the current directory
+
+    if (dp == NULL)
+        return 0; // Unable to open directory
+
+    int match_count = 0; // Count of matching filenames found
+    struct dirent *entry;
+
+    while ((entry = readdir(dp)) != NULL) // Read each entry in the directory
+    {
+        int want_hidden = (prefix[0] == '.'); // Determine if hidden files should be included based on the prefix
+
+        if (!want_hidden) // Skip '.' and '..' entries if not looking for hidden files
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                continue;
+
+        if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) // Check if the entry matches the prefix
+        {
+            // Skip duplicates
+            if (match_exists(matches, match_count, entry->d_name))
+                continue;
+
+            char file_name[256];
+            strncpy(file_name, entry->d_name, sizeof(file_name) - 1);
+            file_name[sizeof(file_name) - 1] = '\0';
+
+            if (entry->d_type == DT_DIR) // Check if the entry is a directory
+            {
+                strncat(file_name, "/", sizeof(file_name) - strlen(file_name) - 1); // Append '/' to directory names
+            }
+
+            strcpy(matches[match_count], file_name); // Copy the matching filename to the output buffer
+            match_count++;
+
+            if (match_count >= MAX_MATCHES) // Check if the maximum number of matches has been reached
+                break; // Exit the loop if maximum matches reached
+        }
+    }
+
+    closedir(dp); // Close the directory stream
+
+    qsort(matches, match_count, sizeof(matches[0]), compare_strings); // Sort the matches alphabetically
+
+    return match_count; // Return the number of matching filenames found
+}
+
+/*
  * Function: get_current_word
  * ----------------------------
  * Extracts the current word from the input buffer based on the cursor position.
@@ -282,30 +349,31 @@ static void print_matches(char matches[][256], int match_count)
 }
 
 /*
- * Function: complete_command
+ * Function: complete_matches
  * --------------------------
- * Completes the current command in the input buffer based on the cursor position.
+ * Completes the current word in the input buffer based on the cursor position.
  *
  * Parameters:
  *   buffer - The input buffer containing the line of text.
  *   length - Pointer to the current length of the input line.
  *   cursor_position - Pointer to the current cursor position in the input line.
+ *   match_func - Pointer to the function used to find matching commands/filenames.
  */
-static void complete_command(char *buffer, size_t *length, size_t *cursor_position)
+static void complete_matches(char *buffer, size_t *length, size_t *cursor_position, int (*match_func)(const char *, char [][256]))
 {
     char word[256]; // Buffer to hold the current word
     size_t word_length;
 
     get_current_word(buffer, *cursor_position, word, &word_length); // Extract the current word based on cursor position
 
-    char matches[MAX_MATCHES][256]; // Buffer to hold the matching commands
-    int match_count = find_command_matches(word, matches); // Find matching commands
+    char matches[MAX_MATCHES][256]; // Buffer to hold the matching words
+    int match_count = match_func(word, matches); // Find matching words
     if (match_count == 0)
-        return; // No matching commands found, exit the function
+        return; // No matching words found, exit the function
 
     if (previous_was_tab && strcmp(last_prefix, word) == 0) // If the previous key was a tab and the prefix hasn't changed
     {        
-        print_matches(matches, match_count); // Print the matching commands in a formatted manner
+        print_matches(matches, match_count); // Print the matching words in a formatted manner
 
         redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
     }
@@ -357,7 +425,9 @@ char *complete_line(const char *buffer, size_t cursor_position)
 void tab_complete(char *buffer, size_t *length, size_t *cursor_position)
 {
     if (is_command_position(buffer, *cursor_position))
-        complete_command(buffer, length, cursor_position);
+        complete_matches(buffer, length, cursor_position, find_command_matches);
+    else
+        complete_matches(buffer, length, cursor_position, find_filename_matches);
 }
 
 void completion_reset(void)
