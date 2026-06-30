@@ -22,6 +22,23 @@ static char last_prefix[256] = ""; // Buffer to store the last prefix used for c
 struct winsize ws; // Structure to hold terminal window size
 
 /*
+ * Function: compare_strings
+ * ---------------------------
+ * Compares two strings for sorting purposes.
+ *
+ * Parameters:
+ *   a - Pointer to the first string.
+ *   b - Pointer to the second string.
+ *
+ * Returns:
+ *   An integer indicating the result of the comparison.
+ */
+static int compare_strings(const void *a, const void *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+/*
  * Function: is_command_position
  * -------------------------------
  * Determines if the cursor is at the position of a command.
@@ -45,84 +62,28 @@ static int is_command_position(const char *buffer, size_t cursor_position)
 }
 
 /*
- * Function: find_command_match (deprecated)
- * ----------------------------
- * Finds a command that matches the given prefix.
+ * Function: match_exists
+ * ------------------------
+ * Checks if a match already exists in the list of matches.
  *
  * Parameters:
- *   prefix - The prefix to match against command names.
- *   match - The buffer to store the matching command.
- *   match_size - The size of the match buffer.
+ *   matches - The buffer containing the list of matches.
+ *   match_count - The number of matches currently in the buffer.
+ *   new_match - The match to check for existence.
  *
  * Returns:
- *   1 if a matching command is found, 0 otherwise.
- * 
- * Note:
- *  This function searches through the directories listed in the PATH environment variable.
- *  It should ignore PATH entries that start with "/mnt" or "/home" to avoid searching in those directories.
+ *   1 if the match exists, 0 otherwise.
  */
-// static int find_command_match(const char *prefix, char *match, size_t match_size)
-// {
-//     char *path = getenv("PATH");
+static int match_exists(char matches[][256], int match_count, const char *new_match)
+{
+    for (int i = 0; i < match_count; i++)
+    {
+        if (strcmp(matches[i], new_match) == 0)
+            return 1; // Match already exists
+    }
 
-//     if (path == NULL)
-//         return 0; // No PATH environment variable found
-
-//     char *path_copy = strdup(path);
-
-//     if (path_copy == NULL)
-//         return 0; // Memory allocation failed
-
-//     char *dir = strtok(path_copy, ":"); // Tokenize the PATH variable by ':'
-
-//     while (dir != NULL)
-//     {
-//         if (strncmp(dir, "/mnt", 4) == 0 || strncmp(dir, "/home", 5) == 0) // Ignore directories starting with "/mnt" or "/home"
-//         {
-//             dir = strtok(NULL, ":"); // Get the next directory in PATH
-//             continue; // Skip to the next directory
-//         }
-        
-//         DIR *dp = opendir(dir);
-
-//         if (dp == NULL) // Unable to open directory, skip to the next one
-//         {
-//             dir = strtok(NULL, ":"); // Get the next directory in PATH
-//             continue; // Skip to the next directory if unable to open
-//         }
-
-//         struct dirent *entry;
-
-//         while ((entry = readdir(dp)) != NULL) // Read each entry in the directory
-//         {
-//             if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) // Check if the entry matches the prefix
-//             {
-//                 char full_path[PATH_MAX];
-
-//                 snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name); // Construct the full path of the command
-
-//                 if (access(full_path, X_OK) == 0) // Check if the command is executable
-//                 {
-//                     strncpy(match, entry->d_name, match_size); // Copy the matching command to the output buffer
-//                     match[match_size - 1] = '\0'; // Ensure null-termination
-
-//                     closedir(dp); // Close the directory stream
-//                     free(path_copy); // Free the duplicated PATH string
-                    
-//                     return 1; // Found a matching command
-//                 }
-//             }
-//         }
-
-//         closedir(dp); // Close the directory stream
-
-//         dir = strtok(NULL, ":"); // Get the next directory in PATH
-//     }
-
-//     free(path_copy);
-
-//     return 0; // No matching command found
-// }
+    return 0; // Match does not exist
+}
 
 /*
  * Function: find_command_matches
@@ -177,7 +138,9 @@ static int find_command_matches(const char *prefix, char matches[][256])
 
                 if (access(full_path, X_OK) == 0) // Check if the command is executable
                 {
-                    // TODO: Avoid duplicates
+                    // Skip duplicates
+                    if (match_exists(matches, match_count, entry->d_name))
+                        continue;
 
                     strcpy(matches[match_count], entry->d_name); // Copy the matching command to the output buffer
                     match_count++;
@@ -194,6 +157,8 @@ static int find_command_matches(const char *prefix, char matches[][256])
     }
 
     free(path_copy);
+
+    qsort(matches, match_count, sizeof(matches[0]), compare_strings); // Sort the matches alphabetically
 
     return match_count; // Return the number of matching commands found
 }
@@ -294,13 +259,22 @@ static void print_matches(char matches[][256], int match_count)
     if (num_columns == 0) // Ensure at least one column is printed
         num_columns = 1;
 
-    printf("\n"); // Print a newline to separate the matches
-    for (int i = 0; i < match_count; i++)
-    {
-        printf("%-*s", (int)max_width, matches[i]); // Print each matching command with padding
+    int rows = (match_count + num_columns - 1) / num_columns; // Calculate the number of rows needed
 
-        if ((i + 1) % num_columns == 0) // Check if the current row is filled
-            printf("\n"); // Print a newline to start a new row
+    printf("\n"); // Print a newline to separate the matches
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < num_columns; j++)
+        {
+            int index = i + j * rows; // Calculate the index of the match to print
+            if (index < match_count) // Ensure the index is within bounds
+            {
+                printf("%-*s", (int)max_width, matches[index]); // Print each matching command with padding
+                if (j < num_columns - 1) // Add spacing between columns (padding)
+                    printf("  ");
+            }
+        }
+        printf("\n"); // Print a newline after each row
     }
 
     if (match_count % num_columns != 0) // If the last row is not filled, print a newline
@@ -331,9 +305,7 @@ static void complete_command(char *buffer, size_t *length, size_t *cursor_positi
         return; // No matching commands found, exit the function
 
     if (previous_was_tab && strcmp(last_prefix, word) == 0) // If the previous key was a tab and the prefix hasn't changed
-    {
-        printf("\n"); // Print a newline to separate the matches
-        
+    {        
         print_matches(matches, match_count); // Print the matching commands in a formatted manner
 
         redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
