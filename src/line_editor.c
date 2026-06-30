@@ -6,7 +6,6 @@
  *      and other line editing features.
  *      
  *      TODO:
- *      - Implement tab completion
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
@@ -332,7 +331,7 @@ char *line_editor_read(void)
             free(buffer); // Free the allocated buffer
             return NULL; // Return NULL to indicate that the input was interrupted
         }
-        else if (c == '\t') // Check for tab character (tab completion)
+        else if (c == '\t') // Check for tab character (tab completion) and Ctrl+I
         {
             tab_complete(buffer, &length, &cursor_position); // Handle tab completion
         }
