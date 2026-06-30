@@ -201,6 +201,7 @@ static void delete_backward(char *buffer, size_t *length, size_t *cursor_positio
         (*length)--; // Decrease the length of the input line
 
         redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        completion_reset(); // Reset the completion state
     }
 }
 
@@ -224,6 +225,7 @@ static void delete_forward(char *buffer, size_t *length, size_t *cursor_position
         (*length)--; // Decrease the length of the input line
 
         redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        completion_reset(); // Reset the completion state
     }
 }
 
@@ -265,6 +267,7 @@ static void insert_character(char *buffer, size_t *length, size_t *cursor_positi
     buffer[*length] = '\0'; // Null-terminate the string
 
     redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    completion_reset(); // Reset the completion state
 }
 
 /*
@@ -347,24 +350,30 @@ char *line_editor_read(void)
                     case 'A': // Up arrow key
                         const char *prev_command = history_previous(); // Get the previous command from history
                         handle_up_down(prev_command, &length, &cursor_position, buffer, buffer_size); // Handle the previous command
+                        completion_reset(); // Reset the completion state
                         break;
                     case 'B': // Down arrow key
                         const char *next_command = history_next(); // Get the next command from history
                         handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
+                        completion_reset(); // Reset the completion state
                         break;
                     case 'C': // Right arrow key
                         move_cursor_right(&cursor_position, length); // Move the cursor right
+                        completion_reset(); // Reset the completion state
                         break;
                     case 'D': // Left arrow key
                         move_cursor_left(&cursor_position); // Move the cursor left
+                        completion_reset(); // Reset the completion state
                         break;
                     case 'F': // End key
                         cursor_position = length; // Move cursor to the end of the line
                         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        completion_reset(); // Reset the completion state
                         break;
                     case 'H': // Home key
                         cursor_position = 0; // Move cursor to the beginning of the line
                         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        completion_reset(); // Reset the completion state
                         break;
                     case '3': // Delete key (ESC [ 3 ~)
                         unsigned char tilde;
@@ -381,16 +390,19 @@ char *line_editor_read(void)
         {
             cursor_position = 0; // Move cursor to the beginning of the line
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('e')) // Check for Ctrl+E (move cursor to end of line)
         {
             cursor_position = length; // Move cursor to the end of the line
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('l')) // Check for Ctrl+L (clear screen)
         {
             printf("\033[H\033[J"); // ANSI escape code to clear the screen and move cursor to home position
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('u')) // Check for Ctrl+U (clear line)
         {
@@ -398,30 +410,36 @@ char *line_editor_read(void)
             cursor_position = 0; // Move cursor to the beginning of the line
             buffer[0] = '\0'; // Null-terminate the string
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('k')) // Check for Ctrl+K (delete from cursor to end of line)
         {
             buffer[cursor_position] = '\0'; // Null-terminate the string at the cursor position
             length = cursor_position; // Update the length of the input line
             redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('b')) // Check for Ctrl+B (move cursor left)
         {
             move_cursor_left(&cursor_position); // Move the cursor left
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('f')) // Check for Ctrl+F (move cursor right)
         {
             move_cursor_right(&cursor_position, length); // Move the cursor right
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('p')) // Check for Ctrl+P (previous command in history)
         {
             const char *prev_command = history_previous(); // Get the previous command from history
             handle_up_down(prev_command, &length, &cursor_position, buffer, buffer_size); // Handle the previous command
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('n')) // Check for Ctrl+N (next command in history)
         {
             const char *next_command = history_next(); // Get the next command from history
             handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
+            completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('w')) // Check for Ctrl+W (delete word before cursor)
         {

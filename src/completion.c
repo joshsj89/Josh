@@ -13,6 +13,11 @@
 #include <unistd.h> // For access()
 #include "completion.h"
 
+#define MAX_MATCHES 100 // Maximum number of matches to store
+
+static int previous_was_tab = 0; // Flag to track if the previous key pressed was a tab
+static char last_prefix[256] = ""; // Buffer to store the last prefix used for completion
+
 /*
  * Function: is_command_position
  * -------------------------------
@@ -37,7 +42,7 @@ static int is_command_position(const char *buffer, size_t cursor_position)
 }
 
 /*
- * Function: find_command_match
+ * Function: find_command_match (deprecated)
  * ----------------------------
  * Finds a command that matches the given prefix.
  *
@@ -53,7 +58,86 @@ static int is_command_position(const char *buffer, size_t cursor_position)
  *  This function searches through the directories listed in the PATH environment variable.
  *  It should ignore PATH entries that start with "/mnt" or "/home" to avoid searching in those directories.
  */
-static int find_command_match(const char *prefix, char *match, size_t match_size)
+// static int find_command_match(const char *prefix, char *match, size_t match_size)
+// {
+//     char *path = getenv("PATH");
+
+//     if (path == NULL)
+//         return 0; // No PATH environment variable found
+
+//     char *path_copy = strdup(path);
+
+//     if (path_copy == NULL)
+//         return 0; // Memory allocation failed
+
+//     char *dir = strtok(path_copy, ":"); // Tokenize the PATH variable by ':'
+
+//     while (dir != NULL)
+//     {
+//         if (strncmp(dir, "/mnt", 4) == 0 || strncmp(dir, "/home", 5) == 0) // Ignore directories starting with "/mnt" or "/home"
+//         {
+//             dir = strtok(NULL, ":"); // Get the next directory in PATH
+//             continue; // Skip to the next directory
+//         }
+        
+//         DIR *dp = opendir(dir);
+
+//         if (dp == NULL) // Unable to open directory, skip to the next one
+//         {
+//             dir = strtok(NULL, ":"); // Get the next directory in PATH
+//             continue; // Skip to the next directory if unable to open
+//         }
+
+//         struct dirent *entry;
+
+//         while ((entry = readdir(dp)) != NULL) // Read each entry in the directory
+//         {
+//             if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) // Check if the entry matches the prefix
+//             {
+//                 char full_path[PATH_MAX];
+
+//                 snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name); // Construct the full path of the command
+
+//                 if (access(full_path, X_OK) == 0) // Check if the command is executable
+//                 {
+//                     strncpy(match, entry->d_name, match_size); // Copy the matching command to the output buffer
+//                     match[match_size - 1] = '\0'; // Ensure null-termination
+
+//                     closedir(dp); // Close the directory stream
+//                     free(path_copy); // Free the duplicated PATH string
+                    
+//                     return 1; // Found a matching command
+//                 }
+//             }
+//         }
+
+//         closedir(dp); // Close the directory stream
+
+//         dir = strtok(NULL, ":"); // Get the next directory in PATH
+//     }
+
+//     free(path_copy);
+
+//     return 0; // No matching command found
+// }
+
+/*
+ * Function: find_command_matches
+ * ----------------------------
+ * Finds commands that match the given prefix.
+ *
+ * Parameters:
+ *   prefix - The prefix to match against command names.
+ *   matches - The buffer to store the matching commands.
+ *
+ * Returns:
+ *   The number of matching commands found.
+ * 
+ * Note:
+ *  This function searches through the directories listed in the PATH environment variable.
+ *  It should ignore PATH entries that start with "/mnt" or "/home" to avoid searching in those directories.
+ */
+static int find_command_matches(const char *prefix, char matches[][256])
 {
     char *path = getenv("PATH");
 
@@ -65,6 +149,7 @@ static int find_command_match(const char *prefix, char *match, size_t match_size
     if (path_copy == NULL)
         return 0; // Memory allocation failed
 
+    int match_count = 0; // Count of matching commands found
     char *dir = strtok(path_copy, ":"); // Tokenize the PATH variable by ':'
 
     while (dir != NULL)
@@ -95,13 +180,13 @@ static int find_command_match(const char *prefix, char *match, size_t match_size
 
                 if (access(full_path, X_OK) == 0) // Check if the command is executable
                 {
-                    strncpy(match, entry->d_name, match_size); // Copy the matching command to the output buffer
-                    match[match_size - 1] = '\0'; // Ensure null-termination
+                    // TODO: Avoid duplicates
 
-                    closedir(dp); // Close the directory stream
-                    free(path_copy); // Free the duplicated PATH string
-                    
-                    return 1; // Found a matching command
+                    strcpy(matches[match_count], entry->d_name); // Copy the matching command to the output buffer
+                    match_count++;
+
+                    if (match_count >= MAX_MATCHES) // Check if the maximum number of matches has been reached
+                        break; // Exit the loop if maximum matches reached
                 }
             }
         }
@@ -113,7 +198,7 @@ static int find_command_match(const char *prefix, char *match, size_t match_size
 
     free(path_copy);
 
-    return 0; // No matching command found
+    return match_count; // Return the number of matching commands found
 }
 
 /*
@@ -150,6 +235,36 @@ static void get_current_word(const char *buffer, size_t cursor_position, char *w
 }
 
 /*
+ * Function: longest_common_prefix
+ * -------------------------------
+ * Finds the longest common prefix among a list of strings.
+ *
+ * Parameters:
+ *   matches - An array of strings to compare.
+ *   count - The number of strings in the array.
+ *
+ * Returns:
+ *   The length of the longest common prefix.
+ */
+static size_t longest_common_prefix(char matches[][256], int count)
+{
+    if (count == 0)
+        return 0;
+
+    size_t prefix_length = strlen(matches[0]);
+    for (int i = 1; i < count; i++)
+    {
+        size_t j = 0;
+        while (j < prefix_length && matches[0][j] && matches[i][j] && matches[i][j] == matches[0][j])
+            j++;
+
+        prefix_length = j;
+    }
+
+    return prefix_length;
+}
+
+/*
  * Function: complete_command
  * --------------------------
  * Completes the current command in the input buffer based on the cursor position.
@@ -167,20 +282,53 @@ static void complete_command(char *buffer, size_t *length, size_t *cursor_positi
 
     get_current_word(buffer, *cursor_position, word, &word_length); // Extract the current word based on cursor position
 
-    char match[256]; // Buffer to hold the matching command
-    if (!find_command_match(word, match, sizeof(match))) // Find a matching command
-        return; // No matching command found, exit the function
+    char matches[MAX_MATCHES][256]; // Buffer to hold the matching commands
+    int match_count = find_command_matches(word, matches); // Find matching commands
+    if (match_count == 0)
+        return; // No matching commands found, exit the function
 
-    size_t extra_length = strlen(match) - word_length; // Calculate the length of the extra characters to insert
+    if (previous_was_tab && strcmp(last_prefix, word) == 0) // If the previous key was a tab and the prefix hasn't changed
+    {
+        printf("\n"); // Print a newline to separate the matches
+        for (int i = 0; i < match_count; i++)
+            printf("%s  ", matches[i]); // Print each matching command
+        printf("\n"); // Print a newline after the matches
 
-    memcpy(buffer + *cursor_position, match + word_length, extra_length); // Insert the matching command into the buffer
+        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    }
+    else // If this is the first tab press or the prefix has changed
+    {
+        size_t lcp = longest_common_prefix(matches, match_count); // Find the longest common prefix among the matches
+        if (lcp > word_length) // If the longest common prefix is longer than the current word, insert the extra characters
+        {
+            size_t extra_length = lcp - word_length; // Calculate the length of the extra characters to insert
+        
+            memcpy(buffer + *cursor_position, matches[0] + word_length, extra_length); // Insert the matching command into the buffer
+        
+            *cursor_position += extra_length; // Update the cursor position
+            *length += extra_length; // Update the length of the input line
+        
+            buffer[*length] = '\0'; // Null-terminate the string
+        
+            redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        }
+        else // If the longest common prefix is not longer than the current word, just set the previous_was_tab flag and store the last prefix
+        {
+            previous_was_tab = 1; // Set the flag indicating that the previous key was a tab
+            strncpy(last_prefix, word, sizeof(last_prefix)); // Store the current prefix for future reference
+        }
+    }
+}
 
-    *cursor_position += extra_length; // Update the cursor position
-    *length += extra_length; // Update the length of the input line
+char *complete_line(const char *buffer, size_t cursor_position)
+{
+    static char word[256];
+    size_t word_length;
 
-    buffer[*length] = '\0'; // Null-terminate the string
+    get_current_word(buffer, cursor_position, word, &word_length);
 
-    redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    // Placeholder for actual completion logic
+    return word;
 }
 
 /*
@@ -200,4 +348,10 @@ void tab_complete(char *buffer, size_t *length, size_t *cursor_position, size_t 
     {
         complete_command(buffer, length, cursor_position, *buffer_size);
     }
+}
+
+void completion_reset(void)
+{
+    previous_was_tab = 0; // Reset the flag for tab completion
+    last_prefix[0] = '\0'; // Clear the last prefix buffer
 }
