@@ -157,12 +157,6 @@ static int find_command_matches(const char *prefix, char matches[][256])
 
     while (dir != NULL)
     {
-        if (strncmp(dir, "/mnt", 4) == 0 || strncmp(dir, "/home", 5) == 0) // Ignore directories starting with "/mnt" or "/home"
-        {
-            dir = strtok(NULL, ":"); // Get the next directory in PATH
-            continue; // Skip to the next directory
-        }
-        
         DIR *dp = opendir(dir);
 
         if (dp == NULL) // Unable to open directory, skip to the next one
@@ -220,16 +214,12 @@ static void get_current_word(const char *buffer, size_t cursor_position, char *w
     // Find the start of the current word
     size_t start = cursor_position;
     while (start > 0 && buffer[start - 1] != ' ')
-    {
         start--;
-    }
 
     // Find the end of the current word
     size_t end = cursor_position;
     while (end < strlen(buffer) && buffer[end] != ' ')
-    {
         end++;
-    }
 
     // Copy the current word into the provided buffer
     *word_length = end - start;
@@ -397,9 +387,7 @@ char *complete_line(const char *buffer, size_t cursor_position)
 void tab_complete(char *buffer, size_t *length, size_t *cursor_position, size_t *buffer_size)
 {
     if (is_command_position(buffer, *cursor_position))
-    {
         complete_command(buffer, length, cursor_position, *buffer_size);
-    }
 }
 
 void completion_reset(void)
