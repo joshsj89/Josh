@@ -100,6 +100,7 @@ static int match_exists(char matches[][256], int match_count, const char *new_ma
  * Parameters:
  *   prefix - The prefix to match against command names.
  *   matches - The buffer to store the matching commands.
+ *   word_length - A pointer to store the length of the word being completed.
  *
  * Returns:
  *   The number of matching commands found.
@@ -108,8 +109,10 @@ static int match_exists(char matches[][256], int match_count, const char *new_ma
  *  This function searches through the directories listed in the PATH environment variable.
  *  It should ignore PATH entries that start with "/mnt" or "/home" to avoid searching in those directories.
  */
-static int find_command_matches(const char *prefix, char matches[][256])
+static int find_command_matches(const char *prefix, char matches[][256], size_t *word_length)
 {
+    (void)word_length; // Suppress unused parameter warning
+    
     char *path = getenv("PATH");
 
     if (path == NULL)
@@ -178,13 +181,43 @@ static int find_command_matches(const char *prefix, char matches[][256])
  * Parameters:
  *   prefix - The prefix to match filenames against.
  *   matches - An array to store the matching filenames.
+ *   word_length - A pointer to store the length of the word being completed.
  *
  * Returns:
  *   The number of matching filenames found.
  */
-static int find_filename_matches(const char *prefix, char matches[][256])
+static int find_filename_matches(const char *prefix, char matches[][256], size_t *word_length)
 {
-    DIR *dp = opendir("."); // Open the current directory
+    char dir[PATH_MAX];
+    char file_prefix[NAME_MAX];
+
+    const char *last_slash = strrchr(prefix, '/'); // Find the last occurrence of '/' in the prefix
+    
+    if (last_slash)
+    {
+        size_t dir_length = last_slash - prefix; // Calculate the length of the directory part
+
+        if (dir_length == 0) // If the prefix is just "/", set dir to "/" and file_prefix to empty
+        {
+            strcpy(dir, "/");
+        }
+        else
+        {
+            strncpy(dir, prefix, dir_length); // Copy the directory part into dir
+            dir[dir_length] = '\0';
+        }
+
+        strncpy(file_prefix, last_slash + 1, sizeof(file_prefix) - 1);
+        *word_length = strlen(file_prefix); // Store the length of the file prefix
+    }
+    else // If there is no '/', set dir to current directory and file_prefix to the entire prefix
+    {
+        strcpy(dir, ".");
+        strcpy(file_prefix, prefix);
+        *word_length = strlen(file_prefix); // Store the length of the file prefix
+    }
+
+    DIR *dp = opendir(dir); // Open the current directory
 
     if (dp == NULL)
         return 0; // Unable to open directory
@@ -194,13 +227,13 @@ static int find_filename_matches(const char *prefix, char matches[][256])
 
     while ((entry = readdir(dp)) != NULL) // Read each entry in the directory
     {
-        int want_hidden = (prefix[0] == '.'); // Determine if hidden files should be included based on the prefix
+        int want_hidden = (file_prefix[0] == '.'); // Determine if hidden files should be included based on the prefix
 
         if (!want_hidden) // Skip '.' and '..' entries if not looking for hidden files
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                 continue;
 
-        if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0) // Check if the entry matches the prefix
+        if (strncmp(entry->d_name, file_prefix, strlen(file_prefix)) == 0) // Check if the entry matches the prefix
         {
             // Skip duplicates
             if (match_exists(matches, match_count, entry->d_name))
@@ -359,7 +392,7 @@ static void print_matches(char matches[][256], int match_count)
  *   cursor_position - Pointer to the current cursor position in the input line.
  *   match_func - Pointer to the function used to find matching commands/filenames.
  */
-static void complete_matches(char *buffer, size_t *length, size_t *cursor_position, int (*match_func)(const char *, char [][256]))
+static void complete_matches(char *buffer, size_t *length, size_t *cursor_position, int (*match_func)(const char *, char [][256], size_t *))
 {
     char word[256]; // Buffer to hold the current word
     size_t word_length;
@@ -367,7 +400,7 @@ static void complete_matches(char *buffer, size_t *length, size_t *cursor_positi
     get_current_word(buffer, *cursor_position, word, &word_length); // Extract the current word based on cursor position
 
     char matches[MAX_MATCHES][256]; // Buffer to hold the matching words
-    int match_count = match_func(word, matches); // Find matching words
+    int match_count = match_func(word, matches, &word_length); // Find matching words
     if (match_count == 0)
         return; // No matching words found, exit the function
 
