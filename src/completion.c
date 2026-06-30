@@ -93,6 +93,35 @@ static int match_exists(char matches[][256], int match_count, const char *new_ma
 }
 
 /*
+ * Function: add_match
+ * -------------------
+ * Adds a new match to the list of matches.
+ *
+ * Parameters:
+ *   matches - The buffer containing the list of matches.
+ *   match_count - A pointer to the count of matches.
+ *   new_match - The match to add.
+ *
+ * Returns:
+ *   1 if the match was added successfully, 0 otherwise.
+ */
+static int add_match(char matches[][256], int *match_count, const char *new_match)
+{
+    // Cannot add more matches, buffer is full
+    if (*match_count >= MAX_MATCHES)
+        return 0;
+
+    // Skip duplicates
+    if (match_exists(matches, *match_count, new_match))
+        return 0;
+
+    strcpy(matches[*match_count], new_match); // Copy the new match into the matches buffer
+    (*match_count)++;
+
+    return 1; // Match added successfully
+}
+
+/*
  * Function: find_command_matches
  * ----------------------------
  * Finds commands that match the given prefix.
@@ -147,17 +176,7 @@ static int find_command_matches(const char *prefix, char matches[][256], size_t 
                 snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name); // Construct the full path of the command
 
                 if (access(full_path, X_OK) == 0) // Check if the command is executable
-                {
-                    // Skip duplicates
-                    if (match_exists(matches, match_count, entry->d_name))
-                        continue;
-
-                    strcpy(matches[match_count], entry->d_name); // Copy the matching command to the output buffer
-                    match_count++;
-
-                    if (match_count >= MAX_MATCHES) // Check if the maximum number of matches has been reached
-                        break; // Exit the loop if maximum matches reached
-                }
+                    add_match(matches, &match_count, entry->d_name); // Add the matching command to the output buffer
             }
         }
 
@@ -235,10 +254,6 @@ static int find_filename_matches(const char *prefix, char matches[][256], size_t
 
         if (strncmp(entry->d_name, file_prefix, strlen(file_prefix)) == 0) // Check if the entry matches the prefix
         {
-            // Skip duplicates
-            if (match_exists(matches, match_count, entry->d_name))
-                continue;
-
             char file_name[256];
             strncpy(file_name, entry->d_name, sizeof(file_name) - 1);
             file_name[sizeof(file_name) - 1] = '\0';
@@ -248,11 +263,7 @@ static int find_filename_matches(const char *prefix, char matches[][256], size_t
                 strncat(file_name, "/", sizeof(file_name) - strlen(file_name) - 1); // Append '/' to directory names
             }
 
-            strcpy(matches[match_count], file_name); // Copy the matching filename to the output buffer
-            match_count++;
-
-            if (match_count >= MAX_MATCHES) // Check if the maximum number of matches has been reached
-                break; // Exit the loop if maximum matches reached
+            add_match(matches, &match_count, file_name); // Add the matching filename to the output buffer
         }
     }
 
