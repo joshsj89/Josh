@@ -13,11 +13,62 @@
  */
 
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "expand.h"
+
+typedef struct
+{
+    char *data;
+    size_t len;
+    size_t capacity;
+} StringBuilder;
+
+/*
+ * Function: sb_init
+ * -----------------
+ * Initializes a StringBuilder with a specified initial capacity.
+ *
+ * Parameters:
+ *   sb - A pointer to the StringBuilder to initialize.
+ *   initial_capacity - The initial capacity of the StringBuilder.
+ *
+ * Returns:
+ *   0 on success, -1 on failure (e.g., memory allocation failure).
+ */
+static int sb_init(StringBuilder *sb, size_t initial_capacity)
+{
+    sb->data = malloc(initial_capacity);
+
+    if (sb->data == NULL)
+        return -1; // Memory allocation failed
+
+    sb->len = 0;
+    sb->capacity = initial_capacity;
+    sb->data[0] = '\0'; // Null-terminate the string
+
+    return 0; // Success
+}
+
+/*
+ * Function: sb_destroy
+ * --------------------
+ * Frees the memory allocated for the StringBuilder and resets its fields.
+ *
+ * Parameters:
+ *   sb - A pointer to the StringBuilder to destroy.
+ */
+static void sb_destroy(StringBuilder *sb)
+{
+    free(sb->data);
+
+    sb->data = NULL;
+    sb->len = 0;
+    sb->capacity = 0;
+}
 
 /*
  * Function: append_char
@@ -25,31 +76,29 @@
  * Appends a character to the destination buffer.
  *
  * Parameters:
- *   dest - A pointer to the destination buffer.
- *   len - A pointer to the current length of the destination buffer.
- *   capacity - A pointer to the current capacity of the destination buffer.
+ *   sb - A pointer to the StringBuilder to append to.
  *   c - The character to append.
  *
  * Returns:
  *   0 on success, -1 on failure.
  */
-static int append_char(char **dest, size_t *len, size_t *capacity, char c)
+static int append_char(StringBuilder *sb, char c)
 {
-    if (*len + 2 > *capacity) // +2 for the new character and null terminator
+    if (sb->len + 2 > sb->capacity) // +2 for the new character and null terminator
     {
-        size_t new_capacity = *capacity * 2; // Double the capacity
+        size_t new_capacity = sb->capacity * 2; // Double the capacity
 
-        char *new_dest = realloc(*dest, new_capacity);
+        char *new_dest = realloc(sb->data, new_capacity);
 
         if (new_dest == NULL)
             return -1; // Memory allocation failed
 
-        *capacity = new_capacity;
-        *dest = new_dest;
+        sb->capacity = new_capacity;
+        sb->data = new_dest;
     }
 
-    (*dest)[(*len)++] = c; // Append the character
-    (*dest)[*len] = '\0'; // Null-terminate the string
+    sb->data[sb->len++] = c; // Append the character
+    sb->data[sb->len] = '\0'; // Null-terminate the string
 
     return 0; // Success
 }
@@ -60,38 +109,88 @@ static int append_char(char **dest, size_t *len, size_t *capacity, char c)
  * Appends a string to the destination buffer.
  *
  * Parameters:
- *   dest - A pointer to the destination buffer.
- *   len - A pointer to the current length of the destination buffer.
- *   capacity - A pointer to the current capacity of the destination buffer.
+ *   sb - A pointer to the StringBuilder to append to.
  *   src - The source string to append.
  * 
  * Returns:
  *   0 on success, -1 on failure.
  */
-static int append_string(char **dest, size_t *len, size_t *capacity, const char *src)
+static int append_string(StringBuilder *sb, const char *src)
 {
     size_t src_len = strlen(src);
     
     // Need room for src plus null terminator
-    if (*len + src_len + 1 > *capacity)
+    if (sb->len + src_len + 1 > sb->capacity)
     {
-        size_t new_capacity = *capacity;
+        size_t new_capacity = sb->capacity;
 
-        while (*len + src_len + 1 > new_capacity)
+        while (sb->len + src_len + 1 > new_capacity)
             new_capacity *= 2; // Double the capacity until it's enough
 
-        char *new_dest = realloc(*dest, new_capacity);
+        char *new_dest = realloc(sb->data, new_capacity);
 
         if (new_dest == NULL)
             return -1; // Memory allocation failed
 
-        *capacity = new_capacity;
-        *dest = new_dest;
+        sb->capacity = new_capacity;
+        sb->data = new_dest;
     }
 
-    memcpy(*dest + *len, src, src_len);
-    *len += src_len;
-    (*dest)[*len] = '\0'; // Null-terminate the string
+    memcpy(sb->data + sb->len, src, src_len);
+    sb->len += src_len;
+    sb->data[sb->len] = '\0'; // Null-terminate the string
+
+    return 0; // Success
+}
+
+/*
+ * Function: append_format
+ * -----------------------
+ * Appends a formatted string to the destination buffer.
+ *
+ * Parameters:
+ *   sb - A pointer to the StringBuilder to append to.
+ *   format - The format string (like printf).
+ *   ... - Additional arguments for the format string.
+ *
+ * Returns:
+ *   0 on success, -1 on failure.
+ */
+static int append_format(StringBuilder *sb, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    // Calculate the required size for the formatted string
+    int required_size = vsnprintf(NULL, 0, format, args);
+    va_end(args);
+
+    if (required_size < 0)
+        return -1; // Encoding error
+
+    // Ensure there is enough capacity in the StringBuilder
+    if (sb->len + required_size + 1 > sb->capacity)
+    {
+        size_t new_capacity = sb->capacity;
+
+        while (sb->len + required_size + 1 > new_capacity)
+            new_capacity *= 2; // Double the capacity until it's enough
+
+        char *new_dest = realloc(sb->data, new_capacity);
+
+        if (new_dest == NULL)
+            return -1; // Memory allocation failed
+
+        sb->capacity = new_capacity;
+        sb->data = new_dest;
+    }
+
+    // Now actually write the formatted string into the buffer
+    va_start(args, format);
+    vsnprintf(sb->data + sb->len, sb->capacity - sb->len, format, args);
+    va_end(args);
+
+    sb->len += required_size; // Update the length of the StringBuilder
 
     return 0; // Success
 }
@@ -136,6 +235,22 @@ static char *expand_variable(const char **input)
     return expanded_value;
 }
 
+/*
+ * Function: expand_command
+ * ------------------------
+ * Expands a command substitution and returns its output.
+ *
+ * Parameters:
+ *   input - A pointer to the input string containing the command to expand.
+ *
+ * Returns:
+ *   A pointer to the output of the command.
+ * 
+ * Note:
+ *  The function returns a newly allocated string containing the output of the command
+ *  in order for the caller to be responsible for freeing the returned string like the 
+ *  other expansion functions.
+ */
 static char *expand_command(const char **input)
 {
     char command[1024];
@@ -189,16 +304,20 @@ static char *expand_command(const char **input)
 static char *expand_string(const char *input)
 {
     size_t capacity = strlen(input) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
-    char *result = malloc(capacity);
-    size_t len = 0;
-    result[0] = '\0'; // Initialize the result string
+    StringBuilder sb;
+    if (sb_init(&sb, capacity) == -1)
+    {
+        fprintf(stderr, "Memory allocation failed\n");
+        return NULL; // Return NULL to indicate an error
+    }
+    
     while (*input != '\0')
     {
         if (*input != '$')
         {
-            if (append_char(&result, &len, &capacity, *input) == -1) // Append the character to the result
+            if (append_char(&sb, *input) == -1) // Append the character to the result
             {
-                free(result);
+                sb_destroy(&sb);
                 return NULL; // Return NULL to indicate an error
             }
             input++; // Move to the next character
@@ -208,17 +327,17 @@ static char *expand_string(const char *input)
             input++; // Move past the '$' character
             if (*input == '\0') // If the string ends with '$', return an empty string
             {
-                free(result);
+                sb_destroy(&sb);
                 return strdup(""); // Return an empty string
             }
 
             if (isalpha(*input) || *input == '_') // Check if the next character is valid for a variable name
             {
                 char *expanded_value = expand_variable(&input); // Expand the variable
-                if (append_string(&result, &len, &capacity, expanded_value) == -1) // Append the variable value to the result
+                if (append_string(&sb, expanded_value) == -1) // Append the variable value to the result
                 {
                     free(expanded_value);
-                    free(result);
+                    sb_destroy(&sb);
                     return NULL;
                 }
                 free(expanded_value); // Free the allocated memory for the expanded value
@@ -227,10 +346,10 @@ static char *expand_string(const char *input)
             {
                 input++; // Move past the '{' character
                 char *expanded_value = expand_variable(&input); // Expand the variable
-                if (append_string(&result, &len, &capacity, expanded_value) == -1) // Append the variable value to the result
+                if (append_string(&sb, expanded_value) == -1) // Append the variable value to the result
                 {
                     free(expanded_value);
-                    free(result);
+                    sb_destroy(&sb);
                     return NULL;
                 }
                 free(expanded_value); // Free the allocated memory for the expanded value
@@ -242,7 +361,7 @@ static char *expand_string(const char *input)
                 else
                 {
                     fprintf(stderr, "Error: Missing closing '}' for variable expansion");
-                    free(result);
+                    sb_destroy(&sb);
                     return NULL; // Return NULL to indicate an error
                 }
             }
@@ -252,7 +371,7 @@ static char *expand_string(const char *input)
 
                 if (*(input + 1) == ')') // Check for empty command substitution
                 {
-                    free(result);
+                    sb_destroy(&sb);
                     return NULL; // Return NULL to indicate an error
                 }
 
@@ -260,7 +379,7 @@ static char *expand_string(const char *input)
                 {
                     // Handle arithmetic expansion here (not implemented)
                     fprintf(stderr, "Error: Arithmetic expansion not implemented");
-                    free(result);
+                    sb_destroy(&sb);
                     return NULL; // Return NULL to indicate an error
                 }
                 else // Handle command substitution
@@ -269,13 +388,13 @@ static char *expand_string(const char *input)
                     char *command_result = expand_command(&input); // Expand the command
                     if (command_result == NULL)
                     {
-                        free(result);
+                        sb_destroy(&sb);
                         return NULL; // Return NULL to indicate an error
                     }
-                    if (append_string(&result, &len, &capacity, command_result) == -1) // Append the command result to the output buffer
+                    if (append_string(&sb, command_result) == -1) // Append the command result to the output buffer
                     {
                         free(command_result);
-                        free(result);
+                        sb_destroy(&sb);
                         return NULL;
                     }
                     free(command_result); // Free the allocated memory for the command result
@@ -283,8 +402,7 @@ static char *expand_string(const char *input)
             }
             else if (*input == '$') // Handle special case for '$$' (PID of the shell)
             {
-                snprintf(result, 20, "%d", getpid()); // Convert PID to string
-                len += strlen(result); // Update the length
+                append_format(&sb, "%d", getpid()); // Convert PID to string
                 input++; // Move past the second '$'
             }
             else if (*input == '?') // Handle special case for '$?' (exit status of the last command)
@@ -294,19 +412,19 @@ static char *expand_string(const char *input)
                 // input++; // Move past the '?'
 
                 fprintf(stderr, "Error: Special variable '$?' not implemented");
-                free(result);
+                sb_destroy(&sb);
                 return NULL; // Return NULL to indicate an error
             }
             else
             {
                 fprintf(stderr, "Error: Invalid variable name after '$'");
-                free(result);
+                sb_destroy(&sb);
                 return NULL; // Return NULL to indicate an error
             }
         }
     }
 
-    return result;
+    return sb.data; // Return the expanded string (caller is responsible for freeing it)
 }
 
 /**
