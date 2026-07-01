@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include "execute.h"
+#include "expand.h"
 #include "history.h"
 #include "line_editor.h"
 #include "parser.h"
@@ -58,6 +59,8 @@ void shell_loop(void)
         history_add(line); // Add the line to command history
 
         char **tokens = parse_line(line); // Parse the input line into tokens
+
+        expand_variables(tokens); // Expand any variables in the tokens
 
         execute_command(tokens); // Execute the parsed command
 

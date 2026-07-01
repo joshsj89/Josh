@@ -8,7 +8,8 @@ SRC = src/main.c \
 		src/builtins.c \
 		src/history.c \
 		src/line_editor.c \
-		src/completion.c
+		src/completion.c \
+		src/expand.c
 
 OBJ = $(SRC:.c=.o)
 
