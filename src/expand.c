@@ -4,7 +4,6 @@
  * This file contains the implementation of variable expansion logic.
  * 
  * TODO:
- *  - Implement support for more complex variable expansions, such as ${VAR} syntax.
  *  - Implement support for shell variables and special variables (e.g., $?, $!, etc.).
  *  - Implement support for command substitution (e.g., $(command) or `command`).
  *  - Implement support for arithmetic expansion (e.g., $((expression))).
@@ -113,11 +112,52 @@ static char *expand_string(const char *input)
                     return NULL; // Return NULL to indicate an error
                 }
             }
+            else if (*input == '(')
+            {
+                // input++; // Move past the '(' character
+
+                if (*(input + 1) == ')') // Check for empty command substitution
+                {
+                    free(result);
+                    return NULL; // Return NULL to indicate an error
+                }
+
+                if (*(input + 1) == '(') // Check for arithmetic expansion
+                {
+                    // Handle arithmetic expansion here (not implemented)
+                    fprintf(stderr, "Error: Arithmetic expansion not implemented");
+                    free(result);
+                    return NULL; // Return NULL to indicate an error
+                }
+                else // Handle command substitution
+                {
+                    // Handle command substitution here (not implemented)
+                    fprintf(stderr, "Error: Command substitution not implemented");
+                    free(result);
+                    return NULL; // Return NULL to indicate an error
+                }
+            }
             else if (*input == '$') // Handle special case for '$$' (PID of the shell)
             {
                 snprintf(ptr, 20, "%d", getpid()); // Convert PID to string
                 ptr += strlen(ptr); // Move the pointer forward
                 input++; // Move past the second '$'
+            }
+            else if (*input == '?') // Handle special case for '$?' (exit status of the last command)
+            {
+                // snprintf(ptr, 20, "%d", WEXITSTATUS(getpid())); // Convert exit status to string
+                // ptr += strlen(ptr); // Move the pointer forward
+                // input++; // Move past the '?'
+
+                fprintf(stderr, "Error: Special variable '$?' not implemented");
+                free(result);
+                return NULL; // Return NULL to indicate an error
+            }
+            else
+            {
+                fprintf(stderr, "Error: Invalid variable name after '$'");
+                free(result);
+                return NULL; // Return NULL to indicate an error
             }
         }
     }
