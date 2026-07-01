@@ -2,6 +2,15 @@
  * expand.c
  *
  * This file contains the implementation of variable expansion logic.
+ * 
+ * TODO:
+ *  - Implement support for more complex variable expansions, such as ${VAR} syntax.
+ *  - Implement support for shell variables and special variables (e.g., $?, $$, $!, etc.).
+ *  - Implement support for command substitution (e.g., $(command) or `command`).
+ *  - Implement support for arithmetic expansion (e.g., $((expression))).
+ *  - Implement support for tilde expansion (e.g., ~username).
+ *  - Implement support for escaping the '$' character (e.g., \$VAR should not expand).
+ *  - Implement support for expanding variables in double-quoted strings while preserving spaces.
  */
 
 #include <ctype.h>
