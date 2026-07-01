@@ -54,6 +54,7 @@ int shell_cd(char **args)
 int shell_exit(char **args)
 {
     (void)args; // Unused parameter
+    history_destroy(); // Clean up history before exiting
     exit(EXIT_SUCCESS); // Exit the shell with status code 0
 }
 
