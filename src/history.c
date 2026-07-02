@@ -164,6 +164,7 @@ void history_add(const char *line)
     history[(history_start + history_count) % HISTORY_SIZE] = new_command; // Store the duplicated command in history
 
     history_count++;
+    history_cursor = 0; // Reset the history cursor when a new command is added
 }
 
 /*
