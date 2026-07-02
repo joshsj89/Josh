@@ -208,9 +208,7 @@ static int append_format(StringBuilder *sb, const char *format, ...)
  *   0 on success, -1 on failure.
  * 
  * Note:
- *  The function returns a newly allocated string containing the value of the variable
- *  in order for the caller to be responsible for freeing the returned string like the 
- *  other expansion functions.
+ *  sb_destroy() is called in case of an error to free the StringBuilder and prevent memory leaks.
  */
 static int expand_variable(StringBuilder *sb, const char **input)
 {
@@ -248,9 +246,7 @@ static int expand_variable(StringBuilder *sb, const char **input)
  *   0 on success, -1 on failure.
  * 
  * Note:
- *  The function returns a newly allocated string containing the output of the command
- *  in order for the caller to be responsible for freeing the returned string like the 
- *  other expansion functions.
+ *  sb_destroy() is called in case of an error to free the StringBuilder and prevent memory leaks.
  */
 static int expand_command(StringBuilder *sb, const char **input)
 {
@@ -385,7 +381,11 @@ static char *expand_string(const char *input)
             }
             else if (*input == '$') // Handle special case for '$$' (PID of the shell)
             {
-                append_format(&sb, "%d", getpid()); // Convert PID to string
+                if (append_format(&sb, "%d", getpid()) == -1) // Convert PID to string
+                {
+                    sb_destroy(&sb);
+                    return NULL;
+                }
                 input++; // Move past the second '$'
             }
             else if (*input == '?') // Handle special case for '$?' (exit status of the last command)
