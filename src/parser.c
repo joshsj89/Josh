@@ -186,6 +186,28 @@ static char *tokenize_line(char *line)
             in_single_quotes = !in_single_quotes; // Toggle single quote state
         else if (*token_end == '\"' && !in_single_quotes)
             in_double_quotes = !in_double_quotes; // Toggle double quote state
+        else if (*token_end == '$' && *(token_end + 1) == '(' && *(token_end + 2) == '(')
+        {
+            token_end += 3; // Skip past the next three characters (the opening parentheses)
+
+            int expr_length = expression(token_end); // Get the length of the expression inside $(())
+            if (expr_length == -1) // Check for syntax error in expression
+            {
+                token_start = NULL; // Reset token_start
+                return NULL; // Return NULL to indicate an error   
+            }
+            token_end += expr_length; // Skip past the end of the expression inside $(())
+
+            if (*token_end != ')' || *(token_end + 1) != ')') // Ensure we have a closing parentheses
+            {
+                fprintf(stderr, "Error: Unmatched opening parenthesis in input");
+                token_start = NULL; // Reset token_start
+                return NULL; // Return NULL to indicate an error
+            }
+
+            token_end += 2; // Skip past the closing parentheses
+            continue;
+        }
         else if (*token_end == '$' && *(token_end + 1) == '(')
         {
             token_end += 2; // Skip past the next two characters (the opening parenthesis)
@@ -196,12 +218,26 @@ static char *tokenize_line(char *line)
                 token_start = NULL; // Reset token_start
                 return NULL; // Return NULL to indicate an error   
             }
-            token_end += cmd_length; // Skip to the end of the simple command inside $()
+            token_end += cmd_length; // Skip past the end of the simple command inside $()
 
+            if (*token_end != ')') // Ensure we have a closing parenthesis
+            {
+                fprintf(stderr, "Error: Unmatched opening parenthesis in input");
+                token_start = NULL; // Reset token_start
+                return NULL; // Return NULL to indicate an error
+            }
+
+            token_end++; // Skip past the closing parenthesis
             continue;
         }
         else if (*token_end == '\\')
             token_end++; // Skip the next character (escaped character will be treated as a literal)
+        else if (!in_single_quotes && !in_double_quotes && *token_end == ')') // Stop tokenizing at closing parenthesis if not in quotes
+        {
+            fprintf(stderr, "syntax error near unexpected token `)'");
+            token_start = NULL; // Reset token_start
+            return NULL; // Return NULL to indicate an error
+        }
 
         token_end++;
     }
