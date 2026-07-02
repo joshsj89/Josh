@@ -19,6 +19,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "expand.h"
+#include "parser.h"
 
 typedef struct
 {
@@ -253,8 +254,20 @@ static int expand_command(StringBuilder *sb, const char **input)
     char command[1024];
     size_t i = 0;
 
-    while (**input && **input != ')' && i < sizeof(command) - 1) // Read until the matching closing parenthesis or end of string
-        command[i++] = *(*input)++;
+    if (**input && i < sizeof(command) - 1)
+    {
+        int cmd_length = simple_command(*input); // Get the length of the simple command inside $()
+
+        if (cmd_length == -1) // Check for syntax error in simple command
+        {
+            sb_destroy(sb);
+            return -1; // Return -1 to indicate an error
+        }
+
+        memcpy(command + i, *input, cmd_length); // Copy the simple command into the command buffer
+        i += cmd_length;
+        (*input) += cmd_length;
+    }
     command[i] = '\0';
 
     if (**input == ')') // Move past the closing parenthesis if present
