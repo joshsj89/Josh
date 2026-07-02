@@ -423,6 +423,60 @@ static char *expand_string(const char *input)
     return sb.data; // Return the expanded string (caller is responsible for freeing it)
 }
 
+/*
+ * remove_quotes - Remove surrounding quotes from a string
+ *
+ * @param input The input string
+ *
+ * @return a pointer to the modified string.
+ * 
+ */
+static char *remove_quotes(const char *input) 
+{
+    StringBuilder sb;
+
+    if (input == NULL)
+        return NULL; // Return NULL if input is NULL
+
+    if (sb_init(&sb, strlen(input) + 1) == -1)
+        return NULL; // Memory allocation failed
+
+    int in_single = 0;
+    int in_double = 0;
+
+    while (*input)
+    {
+        if (*input == '\\')
+        {
+            if (append_char(&sb, *(input + 1)) == -1) // Append the next character after the backslash
+            {
+                sb_destroy(&sb);
+                return NULL; // Memory allocation failed
+            }
+
+            input += 2; // Skip the next character (escaped character will be treated as a literal)
+            continue;
+        }
+        
+        if (*input == '\'' && !in_double)
+            in_single = !in_single; // Toggle single quote state
+        else if (*input == '\"' && !in_single)
+            in_double = !in_double; // Toggle double quote state
+        else
+        {
+            if (append_char(&sb, *input) == -1) // Append the character to the result
+            {
+                sb_destroy(&sb);
+                return NULL; // Memory allocation failed
+            }
+        }
+
+        input++;
+    }
+    
+    return sb.data;
+}
+
 /**
  * Function: expand_variables
  * --------------------------
@@ -434,5 +488,11 @@ static char *expand_string(const char *input)
 void expand_variables(char **tokens)
 {
     for (int i = 0; tokens[i] != NULL; i++)
-        tokens[i] = expand_string(tokens[i]);
+    {
+        char *expanded = expand_string(tokens[i]);
+        char *stripped = remove_quotes(expanded);
+
+        free(expanded);
+        tokens[i] = stripped;
+    }
 }
