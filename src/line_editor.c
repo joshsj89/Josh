@@ -9,6 +9,7 @@
  *      - Implement Ctrl+Left/Right and Alt+B/F for word navigation
  *      - Implement Ctrl+Y to paste the last deleted text
  *      - Implement Ctrl+R for reverse search in history
+ *      - Implement tab autocomplete for double quotes and single quotes
  */
 
 #include <stdio.h>
