@@ -201,17 +201,18 @@ static int append_format(StringBuilder *sb, const char *format, ...)
  * Expands a single variable and returns its value.
  *
  * Parameters:
+ *   sb - A pointer to the StringBuilder to append the variable value to.
  *   input - A pointer to the input string containing the variable to expand.
  *
  * Returns:
- *   A pointer to the expanded variable value.
+ *   0 on success, -1 on failure.
  * 
  * Note:
  *  The function returns a newly allocated string containing the value of the variable
  *  in order for the caller to be responsible for freeing the returned string like the 
  *  other expansion functions.
  */
-static char *expand_variable(const char **input)
+static int expand_variable(StringBuilder *sb, const char **input)
 {
     // Extract the variable name
     char var_name[256];
@@ -225,14 +226,13 @@ static char *expand_variable(const char **input)
     if (var_value == NULL)
         var_value = ""; // If the variable is not set, use an empty string
 
-    char *expanded_value = strdup(var_value);
-
-    if (expanded_value == NULL)
+    if (append_string(sb, var_value) == -1) // Append the variable value to the StringBuilder
     {
-        fprintf(stderr, "Memory allocation failed\n");
-        return NULL; // Return NULL to indicate an error
+        sb_destroy(sb);
+        return -1; // Return -1 to indicate an error
     }
-    return expanded_value;
+
+    return 0; // Return 0 to indicate success
 }
 
 /*
@@ -241,17 +241,18 @@ static char *expand_variable(const char **input)
  * Expands a command substitution and returns its output.
  *
  * Parameters:
+ *   sb - A pointer to the StringBuilder to append the command output to.
  *   input - A pointer to the input string containing the command to expand.
  *
  * Returns:
- *   A pointer to the output of the command.
+ *   0 on success, -1 on failure.
  * 
  * Note:
  *  The function returns a newly allocated string containing the output of the command
  *  in order for the caller to be responsible for freeing the returned string like the 
  *  other expansion functions.
  */
-static char *expand_command(const char **input)
+static int expand_command(StringBuilder *sb, const char **input)
 {
     char command[1024];
     size_t i = 0;
@@ -265,29 +266,34 @@ static char *expand_command(const char **input)
     else
     {
         fprintf(stderr, "Error: Missing closing ')' for command substitution\n");
-        return NULL; // Return NULL to indicate an error
+        return -1; // Return -1 to indicate an error
     }
 
     FILE *fp = popen(command, "r"); // Execute the command and open a pipe to read its output
-    if (fp == NULL)
-        return strdup(""); // If the command fails to execute, return an empty string
-
-    char *output = malloc(1024);
-    if (output == NULL)
+    if (fp == NULL) // Command execution failed
     {
-        fprintf(stderr, "Memory allocation failed\n");
-        pclose(fp);
-        return NULL; // Return NULL to indicate an error
+        sb_destroy(sb);
+        return -1;
     }
 
-    size_t output_len = fread(output, 1, 1023, fp); // Read the command output
-    output[output_len] = '\0'; // Null-terminate the output string
+    char output[1024];
+    while (fgets(output, sizeof(output), fp) != NULL) // Read the command output line by line
+    {
+        // Replace the trailing newline character from the output with a space
+        size_t len = strlen(output);
+        if (len > 0 && output[len - 1] == '\n')
+            output[len - 1] = ' ';
+
+        if (append_string(sb, output) == -1) // Append the command output to the StringBuilder
+        {
+            pclose(fp);
+            sb_destroy(sb);
+            return -1; // Return -1 to indicate an error
+        }
+    }
+
     pclose(fp); // Close the pipe
-
-    while (output_len > 0 && (output[output_len - 1] == '\n' || output[output_len - 1] == '\r')) // Remove trailing newlines
-        output[--output_len] = '\0';
-
-    return output; // Return the command output
+    return 0; // Return 0 to indicate success
 }
 
 /**
@@ -333,26 +339,14 @@ static char *expand_string(const char *input)
 
             if (isalpha(*input) || *input == '_') // Check if the next character is valid for a variable name
             {
-                char *expanded_value = expand_variable(&input); // Expand the variable
-                if (append_string(&sb, expanded_value) == -1) // Append the variable value to the result
-                {
-                    free(expanded_value);
-                    sb_destroy(&sb);
+                if (expand_variable(&sb, &input) == -1) // Expand the variable
                     return NULL;
-                }
-                free(expanded_value); // Free the allocated memory for the expanded value
             }
             else if (*input == '{') // Handle special case for '${VAR}' syntax
             {
                 input++; // Move past the '{' character
-                char *expanded_value = expand_variable(&input); // Expand the variable
-                if (append_string(&sb, expanded_value) == -1) // Append the variable value to the result
-                {
-                    free(expanded_value);
-                    sb_destroy(&sb);
+                if (expand_variable(&sb, &input) == -1) // Append the variable value to the result
                     return NULL;
-                }
-                free(expanded_value); // Free the allocated memory for the expanded value
 
                 if (*input == '}') // Check for closing '}'
                 {
@@ -385,19 +379,8 @@ static char *expand_string(const char *input)
                 else // Handle command substitution
                 {
                     input++; // Move past the '(' character
-                    char *command_result = expand_command(&input); // Expand the command
-                    if (command_result == NULL)
-                    {
-                        sb_destroy(&sb);
+                    if (expand_command(&sb, &input) == -1)
                         return NULL; // Return NULL to indicate an error
-                    }
-                    if (append_string(&sb, command_result) == -1) // Append the command result to the output buffer
-                    {
-                        free(command_result);
-                        sb_destroy(&sb);
-                        return NULL;
-                    }
-                    free(command_result); // Free the allocated memory for the command result
                 }
             }
             else if (*input == '$') // Handle special case for '$$' (PID of the shell)
