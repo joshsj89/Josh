@@ -71,6 +71,11 @@ static char *tokenize_line(char *line)
             paren_depth++; // Increase parenthesis depth
         else if (*token_end == ')' && !in_single_quotes && !in_double_quotes)
             paren_depth--; // Decrease parenthesis depth
+        else if (*token_end == '$' && *(token_end + 1) == '(' && *(token_end + 2) == '(')
+        {
+            paren_depth += 2; // Increase parenthesis depth for $((
+            token_end += 2; // Skip the next two characters (the opening parentheses)
+        }
         else if (*token_end == '$' && *(token_end + 1) == '(')
         {
             paren_depth++; // Increase parenthesis depth for $(
@@ -86,7 +91,21 @@ static char *tokenize_line(char *line)
 
     if (paren_depth != 0)
     {
-        fprintf(stderr, "Error: Unmatched parentheses in input\n");
+        fprintf(stderr, "Error: Unmatched parentheses in input");
+        token_start = NULL; // Reset token_start
+        return NULL; // Return NULL to indicate an error
+    }
+
+    if (in_double_quotes)
+    {
+        fprintf(stderr, "Error: Unmatched double quotes in input");
+        token_start = NULL; // Reset token_start
+        return NULL; // Return NULL to indicate an error
+    }
+
+    if (in_single_quotes)
+    {
+        fprintf(stderr, "Error: Unmatched single quotes in input");
         token_start = NULL; // Reset token_start
         return NULL; // Return NULL to indicate an error
     }
