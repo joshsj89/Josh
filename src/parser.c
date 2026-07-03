@@ -64,8 +64,8 @@ static int expression(const char *input)
 int simple_command(const char *input)
 {
     int length = 0; // Track the length of the simple command
-    int in_single = 0; // Track if we are inside single quotes
-    int in_double = 0; // Track if we are inside double quotes
+    bool in_single = false; // Track if we are inside single quotes
+    bool in_double = false; // Track if we are inside double quotes
 
     while (*input)
     {
