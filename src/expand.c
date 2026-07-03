@@ -5,7 +5,7 @@
  * 
  * TODO:
  *  - Implement support for shell variables and special variables (e.g., $?, $!, etc.).
- *  - Implement support for command substitution (e.g., $(command) or `command`).
+ *  - Implement support for command substitution (e.g., $(command)).
  *  - Implement support for arithmetic expansion (e.g., $((expression))).
  *  - Implement support for tilde expansion (e.g., ~username).
  *  - Implement support for escaping the '$' character (e.g., \$VAR should not expand).
@@ -307,34 +307,39 @@ static int expand_command(StringBuilder *sb, const char **input)
 }
 
 /**
- * Function: expand_string
+ * Function: expand_token
  * -----------------------
- * Expands variables in the input string and returns a new string with the expanded values.
+ * Expands variables, command substitutions, and arithmetic expressions in a token's text.
  *
  * Parameters:
- *   input - The input string containing variables to expand.
+ *   token - A pointer to the Token structure containing the token to expand.
  *
- * Returns:
- *   A newly allocated string with variables expanded. The caller is responsible for freeing this string.
  */
-static char *expand_string(const char *input)
+static void expand_token(Token *token)
 {
-    size_t capacity = strlen(input) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
+    if (token->single_quoted)
+        return; // No expansion needed for single-quoted tokens
+
+    if (!token->contains_variable && !token->contains_command_substitution && !token->contains_arithmetic)
+        return; // No expansion needed if there are no variables, command substitutions, or arithmetic expansions
+
+    size_t capacity = strlen(token->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
+    const char *input = token->text;
     StringBuilder sb;
     if (sb_init(&sb, capacity) == -1)
     {
         fprintf(stderr, "Memory allocation failed\n");
-        return NULL; // Return NULL to indicate an error
+        return; // Return to indicate an error
     }
     
-    while (*input != '\0')
+    while (*input)
     {
         if (*input != '$')
         {
             if (append_char(&sb, *input) == -1) // Append the character to the result
             {
                 sb_destroy(&sb);
-                return NULL; // Return NULL to indicate an error
+                return; // Return to indicate an error
             }
             input++; // Move to the next character
         }
@@ -344,19 +349,19 @@ static char *expand_string(const char *input)
             if (*input == '\0') // If the string ends with '$', return an empty string
             {
                 sb_destroy(&sb);
-                return strdup(""); // Return an empty string
+                return; // Return to indicate an error
             }
 
             if (isalpha(*input) || *input == '_') // Check if the next character is valid for a variable name
             {
                 if (expand_variable(&sb, &input) == -1) // Expand the variable
-                    return NULL;
+                    return;
             }
             else if (*input == '{') // Handle special case for '${VAR}' syntax
             {
                 input++; // Move past the '{' character
                 if (expand_variable(&sb, &input) == -1) // Append the variable value to the result
-                    return NULL;
+                    return;
 
                 if (*input == '}') // Check for closing '}'
                 {
@@ -366,7 +371,7 @@ static char *expand_string(const char *input)
                 {
                     fprintf(stderr, "Error: Missing closing '}' for variable expansion");
                     sb_destroy(&sb);
-                    return NULL; // Return NULL to indicate an error
+                    return; // Return to indicate an error
                 }
             }
             else if (*input == '(')
@@ -376,7 +381,7 @@ static char *expand_string(const char *input)
                 if (*(input + 1) == ')') // Check for empty command substitution
                 {
                     sb_destroy(&sb);
-                    return NULL; // Return NULL to indicate an error
+                    return; // Return to indicate an error
                 }
 
                 if (*(input + 1) == '(') // Check for arithmetic expansion
@@ -384,13 +389,13 @@ static char *expand_string(const char *input)
                     // Handle arithmetic expansion here (not implemented)
                     fprintf(stderr, "Error: Arithmetic expansion not implemented");
                     sb_destroy(&sb);
-                    return NULL; // Return NULL to indicate an error
+                    return; // Return to indicate an error
                 }
                 else // Handle command substitution
                 {
                     input++; // Move past the '(' character
                     if (expand_command(&sb, &input) == -1)
-                        return NULL; // Return NULL to indicate an error
+                        return; // Return to indicate an error
                 }
             }
             else if (*input == '$') // Handle special case for '$$' (PID of the shell)
@@ -398,7 +403,7 @@ static char *expand_string(const char *input)
                 if (append_format(&sb, "%d", getpid()) == -1) // Convert PID to string
                 {
                     sb_destroy(&sb);
-                    return NULL;
+                    return;
                 }
                 input++; // Move past the second '$'
             }
@@ -410,37 +415,38 @@ static char *expand_string(const char *input)
 
                 fprintf(stderr, "Error: Special variable '$?' not implemented");
                 sb_destroy(&sb);
-                return NULL; // Return NULL to indicate an error
+                return; // Return to indicate an error
             }
             else
             {
                 fprintf(stderr, "Error: Invalid variable name after '$'");
                 sb_destroy(&sb);
-                return NULL; // Return NULL to indicate an error
+                return; // Return to indicate an error
             }
         }
     }
 
-    return sb.data; // Return the expanded string (caller is responsible for freeing it)
+    free(token->text); // Free the old text to prevent memory leaks
+    token->text = sb.data; // Update the token text with the expanded string
+    return; // Return to indicate successful expansion
 }
 
 /*
  * remove_quotes - Remove surrounding quotes from a string
  *
- * @param input The input string
- *
- * @return a pointer to the modified string.
+ * @param token The token containing the string to remove quotes from
  * 
  */
-static char *remove_quotes(const char *input) 
+static void remove_quotes(Token *token) 
 {
+    char *input = token->text;
     StringBuilder sb;
 
-    if (input == NULL)
-        return NULL; // Return NULL if input is NULL
+    if (token == NULL || token->text == NULL)
+        return; // Return if token or its text is NULL
 
     if (sb_init(&sb, strlen(input) + 1) == -1)
-        return NULL; // Memory allocation failed
+        return; // Memory allocation failed
 
     bool in_single = false;
     bool in_double = false;
@@ -452,48 +458,48 @@ static char *remove_quotes(const char *input)
             if (append_char(&sb, *(input + 1)) == -1) // Append the next character after the backslash
             {
                 sb_destroy(&sb);
-                return NULL; // Memory allocation failed
+                return; // Memory allocation failed
             }
 
             input += 2; // Skip the next character (escaped character will be treated as a literal)
             continue;
         }
         
-        if (*input == '\'' && !in_double)
+        if (*input == '\'' && token->single_quoted && !in_double)
             in_single = !in_single; // Toggle single quote state
-        else if (*input == '\"' && !in_single)
+        else if (*input == '\"' && token->double_quoted && !in_single)
             in_double = !in_double; // Toggle double quote state
         else
         {
             if (append_char(&sb, *input) == -1) // Append the character to the result
             {
                 sb_destroy(&sb);
-                return NULL; // Memory allocation failed
+                return; // Memory allocation failed
             }
         }
 
         input++;
     }
-    
-    return sb.data;
+
+    free(token->text); // Free the old text to prevent memory leaks
+    token->text = sb.data; // Update the token text with the modified string
+    token->single_quoted = false; // Reset the single_quoted flag
+    token->double_quoted = false; // Reset the double_quoted flag
 }
 
 /**
  * Function: expand_variables
  * --------------------------
- * Expands variables in an array of strings.
+ * Expands variables, command substitutions, and arithmetic expressions in all tokens of a command.
  *
  * Parameters:
- *   tokens - An array of strings containing variables to expand.
+ *   cmd - A pointer to the Command structure containing the tokens to expand.
  */
-void expand_variables(char **tokens)
+void expand_variables(Command *cmd)
 {
-    for (int i = 0; tokens[i] != NULL; i++)
+    for (size_t i = 0; i < cmd->argc; i++)
     {
-        char *expanded = expand_string(tokens[i]);
-        char *stripped = remove_quotes(expanded);
-
-        free(expanded);
-        tokens[i] = stripped;
+        expand_token(&cmd->argv[i]);
+        remove_quotes(&cmd->argv[i]);
     }
 }

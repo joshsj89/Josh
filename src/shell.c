@@ -58,13 +58,13 @@ void shell_loop(void)
 
         history_add(line); // Add the line to command history
 
-        char **tokens = parse_line(line); // Parse the input line into tokens
+        Command *cmd = parse_line(line); // Parse the input line into a command
 
-        expand_variables(tokens); // Expand any variables in the tokens
+        expand_variables(cmd); // Expand any variables in the command
 
-        execute_command(tokens); // Execute the parsed command
+        execute_command(cmd); // Execute the parsed command
 
-        free_tokens(tokens); // Free the memory allocated for tokens
+        free_command(cmd); // Free the memory allocated for the command
         free(line); // Free the memory allocated by line_editor_read
     }
 

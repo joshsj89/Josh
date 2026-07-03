@@ -1,9 +1,11 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "tokens.h"
+
 int simple_command(const char *input);
 
-char **parse_line(char *line);
-void free_tokens(char **tokens);
+Command *parse_line(char *line);
+void free_command(Command *cmd);
 
 #endif /* PARSER_H */

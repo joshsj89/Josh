@@ -1,8 +1,10 @@
 #ifndef BUILTINS_H
 #define BUILTINS_H
 
-int shell_cd(char **args);
-int shell_exit(char **args);
-int execute_builtin(char **args);
+#include "tokens.h"
+
+int shell_cd(Command *cmd);
+int shell_exit(Command *cmd);
+int execute_builtin(Command *cmd);
 
 #endif /* BUILTINS_H */
