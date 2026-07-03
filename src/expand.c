@@ -286,21 +286,20 @@ static int expand_command(StringBuilder *sb, const char **input)
         return -1;
     }
 
-    char output[1024];
-    while (fgets(output, sizeof(output), fp) != NULL) // Read the command output line by line
+    char buffer[1024];
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) // Read the command output line by line
     {
-        // Replace the trailing newline character from the output with a space
-        size_t len = strlen(output);
-        if (len > 0 && output[len - 1] == '\n')
-            output[len - 1] = ' ';
-
-        if (append_string(sb, output) == -1) // Append the command output to the StringBuilder
+        if (append_string(sb, buffer) == -1) // Append the command output line to the StringBuilder
         {
             pclose(fp);
             sb_destroy(sb);
             return -1; // Return -1 to indicate an error
         }
     }
+
+    // Remove the trailing newline character from the full output
+        while (sb->len > 0 && sb->data[sb->len - 1] == '\n')
+            sb->data[--sb->len] = '\0';
 
     pclose(fp); // Close the pipe
     return 0; // Return 0 to indicate success
