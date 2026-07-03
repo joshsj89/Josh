@@ -14,6 +14,7 @@
 
 #include <ctype.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -441,8 +442,8 @@ static char *remove_quotes(const char *input)
     if (sb_init(&sb, strlen(input) + 1) == -1)
         return NULL; // Memory allocation failed
 
-    int in_single = 0;
-    int in_double = 0;
+    bool in_single = false;
+    bool in_double = false;
 
     while (*input)
     {

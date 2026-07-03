@@ -259,9 +259,7 @@ static int find_filename_matches(const char *prefix, char matches[][256], size_t
             file_name[sizeof(file_name) - 1] = '\0';
 
             if (entry->d_type == DT_DIR) // Check if the entry is a directory
-            {
                 strncat(file_name, "/", sizeof(file_name) - strlen(file_name) - 1); // Append '/' to directory names
-            }
 
             add_match(matches, &match_count, file_name); // Add the matching filename to the output buffer
         }

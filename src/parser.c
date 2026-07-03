@@ -5,6 +5,7 @@
  */
 
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,8 +149,8 @@ int simple_command(const char *input)
  */
 static char *tokenize_line(char *line)
 {
-    int in_single_quotes = 0;
-    int in_double_quotes = 0;
+    bool in_single_quotes = false;
+    bool in_double_quotes = false;
 
     static char *token_start = NULL; // Pointer to the start of the current token
 
