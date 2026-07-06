@@ -227,7 +227,7 @@ int main()
     char line[256];
     while (1) 
     {
-        printf("josh> ");
+        printf("tokenizer> ");
         if (fgets(line, sizeof(line), stdin) == NULL) 
         {
             // fprintf(stderr, "Error reading input\n");
