@@ -20,6 +20,7 @@
 #include "completion.h"
 #include "history.h"
 #include "line_editor.h"
+#include "prompt.h"
 
 static const char *left_arrow = "\033[D";  // ANSI escape code for left arrow
 static const char *right_arrow = "\033[C"; // ANSI escape code for right arrow
@@ -98,7 +99,7 @@ void redraw_line(const char *buffer, size_t length, size_t cursor_position)
     printf("\033[2K"); // ANSI escape code to clear the entire line
 
     // Print the prompt
-    printf("josh> ");
+    fputs(get_prompt(), stdout);
 
     // Print the buffer content
     fwrite(buffer, 1, length, stdout);

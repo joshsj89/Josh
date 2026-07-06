@@ -14,6 +14,7 @@
 #include "history.h"
 #include "line_editor.h"
 #include "parser.h"
+#include "prompt.h"
 #include "shell.h"
                                                                           
 const char *banner = "\n"
@@ -38,7 +39,8 @@ const char *banner = "\n"
  */
 static void print_prompt(void)
 {
-    printf("josh> ");
+    fputs(get_prompt(), stdout);
+    
     fflush(stdout); // Ensure the prompt is displayed immediately
 }
 
