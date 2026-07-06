@@ -8,8 +8,10 @@
     * - Implement support for input/output redirection, piping, and background jobs (&).
 */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h> // for pid_t
 #include <sys/wait.h> // for waitpid
 #include <unistd.h> // for fork, execvp
@@ -94,7 +96,11 @@ void execute_command(Command *cmd)
         char **argv = command_to_argv(cmd); // Convert Command to argv array
         if (execvp(cmd->argv[0].text, argv) < 0) // execvp returns only on error
         {
-            perror(cmd->argv[0].text); // Handle execvp error
+            if (errno == ENOENT && strchr(cmd->argv[0].text, '/') == NULL) // Command not found and no '/' in command
+                fprintf(stderr, "%s: command not found\n", cmd->argv[0].text); // Handle command not found error
+            else
+                perror(cmd->argv[0].text); // Handle execvp error
+
             free(argv); // Free the allocated argv array before exiting
             exit(EXIT_FAILURE);
         }
