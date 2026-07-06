@@ -15,6 +15,17 @@
 #include "line_editor.h"
 #include "parser.h"
 #include "shell.h"
+                                                                          
+const char *banner = "\n"
+    "\x1b[34m       █████                  █████     \x1b[0m\n"
+    "\x1b[34m      ▒▒███                  ▒▒███      \x1b[0m\n"
+    "\x1b[34m       ▒███   ██████   █████  ▒███████  \x1b[0m\n"
+    "\x1b[34m       ▒███  ███▒▒███ ███▒▒   ▒███▒▒███ \x1b[0m\n"
+    "\x1b[34m       ▒███ ▒███ ▒███▒▒█████  ▒███ ▒███ \x1b[0m\n"
+    "\x1b[34m ███   ▒███ ▒███ ▒███ ▒▒▒▒███ ▒███ ▒███ \x1b[0m\n"
+    "\x1b[34m▒▒████████  ▒▒██████  ██████  ████ █████\x1b[0m\n"
+    " \x1b[34m ▒▒▒▒▒▒▒▒    ▒▒▒▒▒▒  ▒▒▒▒▒▒  ▒▒▒▒ ▒▒▒▒▒ \x1b[0m\n"
+    "                                        ";
 
 /* 
  * Function: print_prompt
@@ -43,6 +54,14 @@ static void print_prompt(void)
 void shell_loop(void)
 {
     history_init(); // Initialize the command history
+
+    // Banner message for the shell
+    printf("Welcome to Josh!\n");
+    printf("%s\n", banner);
+    printf("A simple shell, built from scratch in C.\n");
+    printf("------------------------------------------------\n");
+    printf("Type 'exit' or press Ctrl+D to exit the shell.\n");
+    printf("------------------------------------------------\n");
 
     while (1)
     {
