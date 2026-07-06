@@ -5,6 +5,7 @@
  */
 
 #include <errno.h> // for errno
+#include <limits.h> // for PATH_MAX
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,21 +23,46 @@
  *   1 if the command was executed successfully
  * 
  * TODO:
- *  - Implement handling for "cd -" and "cd ~" to change to the previous directory and home directory, respectively.
+ *  - Implement handling for "cd ~" to change to the home directory (~ gets expanded to the user's home directory)
  */
 int shell_cd(Command *cmd)
 {
+    char oldpwd[PATH_MAX];
+    char cwd[PATH_MAX];
+
+    if (getcwd(oldpwd, sizeof(oldpwd)) == NULL)
+        oldpwd[0] = '\0'; // If getcwd fails, set oldpwd to an empty string
+
     if (cmd->argv[1].text == NULL) // no argument provided
     {
         if (chdir(getenv("HOME")) != 0) // change to home directory
         {
             fprintf(stderr, "cd: %s\n", strerror(errno));
+            return 1;
+        }
+    }
+    else if (strcmp(cmd->argv[1].text, "-") == 0) // change to previous directory
+    {
+        const char *prev_dir = getenv("OLDPWD");
+        if (prev_dir == NULL || chdir(prev_dir) != 0)
+        {
+            fprintf(stderr, "cd: %s\n", strerror(errno));
+            return 1;
         }
     }
     else
     {
         if (chdir(cmd->argv[1].text) != 0)
+        {
             fprintf(stderr, "cd: %s: %s\n", cmd->argv[1].text, strerror(errno));
+            return 1;
+        }
+    }
+
+    if (getcwd(cwd, sizeof(cwd)) != NULL)
+    {
+        setenv("OLDPWD", oldpwd, 1); // Update OLDPWD environment variable
+        setenv("PWD", cwd, 1); // Update PWD environment variable
     }
 
     return 1; // Return 1 to indicate that the shell should continue running
