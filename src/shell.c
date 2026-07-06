@@ -62,6 +62,7 @@ void shell_loop(void)
     printf("%s\n", banner);
     printf("A simple shell, built from scratch in C.\n");
     printf("------------------------------------------------\n");
+    printf("🐚 \x1b[36mShell:\x1b[0m Josh v0.1.1\n");
     printf("Type 'exit' or press Ctrl+D to exit the shell.\n");
     printf("------------------------------------------------\n");
 
