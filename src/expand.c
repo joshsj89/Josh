@@ -5,9 +5,8 @@
  * 
  * TODO:
  *  - Implement support for shell variables and special variables (e.g., $?, $!, etc.).
- *  - Implement support for command substitution (e.g., $(command)).
  *  - Implement support for arithmetic expansion (e.g., $((expression))).
- *  - Implement support for tilde expansion (e.g., ~username).
+ *  - Implement support for Bash string manipulation (e.g., ${VAR#pattern}, ${VAR%pattern}, etc.).
  *  - Implement support for escaping the '$' character (e.g., \$VAR should not expand).
  *  - Implement support for expanding variables in double-quoted strings while preserving spaces.
  */
