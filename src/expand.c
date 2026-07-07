@@ -305,23 +305,16 @@ static int expand_command(StringBuilder *sb, const char **input)
     return 0; // Return 0 to indicate success
 }
 
-/**
- * Function: expand_token
- * -----------------------
- * Expands variables, command substitutions, and arithmetic expressions in a token's text.
+/*
+ * Function: expand_parameter_token
+ * -------------------------------
+ * Expands parameter references in a token.
  *
  * Parameters:
- *   token - A pointer to the Token structure containing the token to expand.
- *
+ *   token - A pointer to the token to expand.
  */
-static void expand_token(Token *token)
+static void expand_parameter_token(Token *token)
 {
-    if (token->single_quoted)
-        return; // No expansion needed for single-quoted tokens
-
-    if (!token->contains_variable && !token->contains_command_substitution && !token->contains_arithmetic)
-        return; // No expansion needed if there are no variables, command substitutions, or arithmetic expansions
-
     size_t capacity = strlen(token->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
     const char *input = token->text;
     StringBuilder sb;
@@ -373,7 +366,97 @@ static void expand_token(Token *token)
                     return; // Return to indicate an error
                 }
             }
-            else if (*input == '(')
+            else if (*input == '$') // Handle special case for '$$' (PID of the shell)
+            {
+                if (append_format(&sb, "%d", getpid()) == -1) // Convert PID to string
+                {
+                    sb_destroy(&sb);
+                    return;
+                }
+                input++; // Move past the second '$'
+            }
+            else if (*input == '?') // Handle special case for '$?' (exit status of the last command)
+            {
+                // snprintf(result, 20, "%d", WEXITSTATUS(getpid())); // Convert exit status to string
+                // len += strlen(result); // Update the length
+                // input++; // Move past the '?'
+
+                fprintf(stderr, "Error: Special variable '$?' not implemented");
+                sb_destroy(&sb);
+                return; // Return to indicate an error
+            }
+        }
+    }
+
+    free(token->text); // Free the old text to prevent memory leaks
+    token->text = sb.data; // Update the token text with the expanded string
+    return; // Return to indicate successful expansion
+}
+
+/*
+ * Function: expand_parameters
+ * ---------------------------
+ * Expands all parameter references in a command.
+ *
+ * Parameters:
+ *   cmd - A pointer to the command whose parameters to expand.
+ */
+static void expand_parameters(Command *cmd)
+{
+    for (size_t i = 0; i < cmd->argc; i++)
+    {
+        Token *token = &cmd->argv[i];
+        
+        if (token->single_quoted)
+            continue; // No expansion needed for single-quoted tokens
+
+        if (!token->contains_variable)
+            continue; // No expansion needed if there are no variables
+        
+        expand_parameter_token(token);
+    }
+}
+
+/*
+ * Function: expand_command_arithmetic_token
+ * ----------------------------------------
+ * Expands command and arithmetic expansions in a token.
+ *
+ * Parameters:
+ *   token - A pointer to the token to expand.
+ */
+static void expand_command_arithmetic_token(Token *token)
+{
+    size_t capacity = strlen(token->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
+    const char *input = token->text;
+    StringBuilder sb;
+    if (sb_init(&sb, capacity) == -1)
+    {
+        fprintf(stderr, "Memory allocation failed\n");
+        return; // Return to indicate an error
+    }
+    
+    while (*input)
+    {
+        if (*input != '$')
+        {
+            if (append_char(&sb, *input) == -1) // Append the character to the result
+            {
+                sb_destroy(&sb);
+                return; // Return to indicate an error
+            }
+            input++; // Move to the next character
+        }
+        else
+        {
+            input++; // Move past the '$' character
+            if (*input == '\0') // If the string ends with '$', return an empty string
+            {
+                sb_destroy(&sb);
+                return; // Return to indicate an error
+            }
+
+            if (*input == '(')
             {
                 // input++; // Move past the '(' character
 
@@ -397,31 +480,6 @@ static void expand_token(Token *token)
                         return; // Return to indicate an error
                 }
             }
-            else if (*input == '$') // Handle special case for '$$' (PID of the shell)
-            {
-                if (append_format(&sb, "%d", getpid()) == -1) // Convert PID to string
-                {
-                    sb_destroy(&sb);
-                    return;
-                }
-                input++; // Move past the second '$'
-            }
-            else if (*input == '?') // Handle special case for '$?' (exit status of the last command)
-            {
-                // snprintf(result, 20, "%d", WEXITSTATUS(getpid())); // Convert exit status to string
-                // len += strlen(result); // Update the length
-                // input++; // Move past the '?'
-
-                fprintf(stderr, "Error: Special variable '$?' not implemented");
-                sb_destroy(&sb);
-                return; // Return to indicate an error
-            }
-            else
-            {
-                fprintf(stderr, "Error: Invalid variable name after '$'");
-                sb_destroy(&sb);
-                return; // Return to indicate an error
-            }
         }
     }
 
@@ -431,12 +489,56 @@ static void expand_token(Token *token)
 }
 
 /*
- * remove_quotes - Remove surrounding quotes from a string
+ * expand_command_arithmetic_expansions - Expand command substitutions and arithmetic expressions in a command
+ * @param cmd The command containing tokens to expand
+ */
+static void expand_command_arithmetic_expansions(Command *cmd)
+{
+    for (size_t i = 0; i < cmd->argc; i++)
+    {
+        Token *token = &cmd->argv[i];
+        
+        if (token->single_quoted)
+            continue; // No expansion needed for single-quoted tokens
+
+        if (!token->contains_command_substitution && !token->contains_arithmetic)
+            continue; // No expansion needed if there are no command substitutions or arithmetic expansions
+        
+        expand_command_arithmetic_token(token);
+    }
+}
+
+/*
+ * expand_pathname - Expand pathname expansions in a command
+ * @param cmd The command containing tokens to expand
+ */
+static void expand_pathname(Command *cmd)
+{
+    (void)cmd; // Suppress unused parameter warning
+    
+    /*
+    for (size_t i = 0; i < cmd->argc; i++)
+    {
+        Token *token = &cmd->argv[i];
+        
+        if (token->single_quoted || token->double_quoted)
+            continue; // No expansion needed for quoted tokens
+
+        if (!token->pathname_expand)
+            continue; // No expansion needed if there are no pathname expansions
+        
+        fprintf(stderr, "Error: Pathname expansion not implemented");
+    }
+    */
+}
+
+/*
+ * remove_quotes_token - Remove surrounding quotes from a token's text
  *
  * @param token The token containing the string to remove quotes from
  * 
  */
-static void remove_quotes(Token *token) 
+static void remove_quotes_token(Token *token) 
 {
     char *input = token->text;
     StringBuilder sb;
@@ -486,6 +588,16 @@ static void remove_quotes(Token *token)
     token->double_quoted = false; // Reset the double_quoted flag
 }
 
+/*
+ * remove_quotes - Remove surrounding quotes from all tokens in a command
+ * @param cmd The command containing tokens to process
+ */
+static void remove_quotes(Command *cmd)
+{
+    for (size_t i = 0; i < cmd->argc; i++)
+        remove_quotes_token(&cmd->argv[i]);
+}
+
 /**
  * Function: expand_variables
  * --------------------------
@@ -496,9 +608,15 @@ static void remove_quotes(Token *token)
  */
 void expand_variables(Command *cmd)
 {
-    for (size_t i = 0; i < cmd->argc; i++)
-    {
-        expand_token(&cmd->argv[i]);
-        remove_quotes(&cmd->argv[i]);
-    }
+    // for (size_t i = 0; i < cmd->argc; i++)
+    // {
+    //     expand_token(&cmd->argv[i]);
+    //     // word_split(cmd); // Perform word splitting on the token
+    //     remove_quotes(&cmd->argv[i]);
+    // }
+    expand_parameters(cmd);
+    expand_command_arithmetic_expansions(cmd);
+    expand_pathname(cmd);
+    // word_split(cmd); // Perform word splitting on the token
+    remove_quotes(cmd);
 }
