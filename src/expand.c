@@ -13,6 +13,7 @@
  */
 
 #include <ctype.h>
+#include <pwd.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -303,6 +304,108 @@ static int expand_command(StringBuilder *sb, const char **input)
 
     pclose(fp); // Close the pipe
     return 0; // Return 0 to indicate success
+}
+
+/*
+ * Function: expand_tilde_token
+ * ----------------------------
+ * Expands a tilde token and updates its text.
+ *
+ * Parameters:
+ *   token - A pointer to the Token to expand.
+ */
+static void expand_tilde_token(Token *token)
+{
+    char *text = token->text;
+    char *slash = strchr(text, '/'); // Find the first '/' in the token text
+    char *tilde_prefix = NULL;
+
+    if (slash) // if a slash is found, we have a tilde prefix followed by a path
+        tilde_prefix = strndup(text, slash - text);
+    else // if no slash is found, the entire token is a tilde prefix
+        tilde_prefix = strdup(text);
+
+    char *expanded = NULL;
+
+    if (strcmp(tilde_prefix, "~") == 0) // Handle the case of ~
+    {
+        expanded = getenv("HOME"); // Get the value of $HOME
+
+        if (expanded == NULL) // If $HOME is not set, use the current user's home directory
+        {
+            struct passwd *pw = getpwuid(getuid());
+            if (pw)
+                expanded = pw->pw_dir;
+            else
+                fprintf(stderr, "Error: Unable to determine home directory\n");
+        }
+    }
+    else if (strncmp(tilde_prefix, "~+", 2) == 0) // Handle the case of ~+
+    {
+        expanded = getenv("PWD"); // Get the value of $PWD
+
+        if (expanded == NULL)
+            fprintf(stderr, "Error: PWD environment variable not set\n");
+    }
+    else if (strncmp(tilde_prefix, "~-", 2) == 0) // Handle the case of ~-
+    {
+        expanded = getenv("OLDPWD"); // Get the value of $OLDPWD
+        
+        // If $OLDPWD is not set, use the literal string
+        if (expanded == NULL)
+            expanded = "~-";
+    }
+    else if (tilde_prefix[0] == '~') // Handle the case of ~username
+    {
+        char *username = tilde_prefix + 1; // Skip the '~' character
+        struct passwd *pw = getpwnam(username); // Get the passwd struct for the username
+        if (pw)
+            expanded = pw->pw_dir; // Get the home directory for the user
+        else
+            expanded = tilde_prefix; // If the user does not exist, use the literal string
+    }
+
+    if (expanded)
+    {
+        size_t expanded_len = strlen(expanded);
+        size_t suffix_len = slash ? strlen(slash) : 0;
+        char *new_text = malloc(expanded_len + suffix_len + 1); // +1 for null terminator
+
+        if (new_text == NULL)
+        {
+            fprintf(stderr, "Error: Memory allocation failed during tilde expansion\n");
+            free(tilde_prefix);
+            return;
+        }
+
+        strcpy(new_text, expanded); // Copy the expanded prefix
+        if (slash) // Append the suffix if it exists
+            strcat(new_text, slash);
+
+        free(token->text); // Free the old token text
+        token->text = new_text; // Update the token text with the new expanded string
+    }
+
+    free(tilde_prefix);
+}
+
+/*
+ * Function: expand_tilde
+ * ----------------------
+ * Expands tilde expressions in a command.
+ *
+ * Parameters:
+ *   cmd - A pointer to the Command to expand.
+ */
+static void expand_tilde(Command *cmd)
+{
+    for (size_t i = 0; i < cmd->argc; i++)
+    {
+        Token *token = &cmd->argv[i];
+
+        if (token->tilde_expand)
+            expand_tilde_token(token);
+    }
 }
 
 /*
@@ -608,12 +711,7 @@ static void remove_quotes(Command *cmd)
  */
 void expand_variables(Command *cmd)
 {
-    // for (size_t i = 0; i < cmd->argc; i++)
-    // {
-    //     expand_token(&cmd->argv[i]);
-    //     // word_split(cmd); // Perform word splitting on the token
-    //     remove_quotes(&cmd->argv[i]);
-    // }
+    expand_tilde(cmd);
     expand_parameters(cmd);
     expand_command_arithmetic_expansions(cmd);
     expand_pathname(cmd);

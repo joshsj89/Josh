@@ -46,6 +46,7 @@ typedef struct
     bool contains_command_substitution; // Indicates if the token contains command substitution (e.g., $(command))
     bool contains_arithmetic; // Indicates if the token contains arithmetic expansion (e.g., $((1 + 2)))
 
+    bool tilde_expand; // Indicates if the token should undergo tilde expansion (e.g., ~/)
     bool field_split;
     bool pathname_expand; // Indicates if the token should undergo pathname expansion (globbing)
 } Token;

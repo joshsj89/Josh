@@ -25,6 +25,7 @@ void token_init(Token *token)
     token->contains_variable = false;
     token->contains_command_substitution = false;
     token->contains_arithmetic = false;
+    token->tilde_expand = false;
     token->field_split = false;
     token->pathname_expand = false;
 }
@@ -55,6 +56,7 @@ void token_print(const Token *token)
     printf("Contains Variable: %s\n", token->contains_variable ? "true" : "false");
     printf("Contains Command Substitution: %s\n", token->contains_command_substitution ? "true" : "false");
     printf("Contains Arithmetic: %s\n", token->contains_arithmetic ? "true" : "false");
+    printf("Tilde Expand: %s\n", token->tilde_expand ? "true" : "false");
     printf("Field Split: %s\n", token->field_split ? "true" : "false");
     printf("Pathname Expand: %s\n", token->pathname_expand ? "true" : "false");
     printf("------------------------------\n");
@@ -228,6 +230,9 @@ static void tokenize_line(char *line, Token *token)
         token_start = NULL; // Reset token_start
         return;
     }
+
+    if (*line == '~') // Check for tilde expansion (i.e. 1st character is a tilde)
+        token->tilde_expand = true; // Mark the token for tilde expansion
 
     char *token_end = line; // Pointer to the end of the current token
     while (*token_end)
