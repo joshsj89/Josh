@@ -298,8 +298,8 @@ static int expand_command(StringBuilder *sb, const char **input)
     }
 
     // Remove the trailing newline character from the full output
-        while (sb->len > 0 && sb->data[sb->len - 1] == '\n')
-            sb->data[--sb->len] = '\0';
+    while (sb->len > 0 && sb->data[sb->len - 1] == '\n')
+        sb->data[--sb->len] = '\0';
 
     pclose(fp); // Close the pipe
     return 0; // Return 0 to indicate success
