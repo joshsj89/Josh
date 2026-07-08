@@ -635,6 +635,121 @@ static void expand_pathname(Command *cmd)
 }
 
 /*
+ * is_ifs - Check if a character is in the IFS (Internal Field Separator)
+ * @param c The character to check
+ * @return true if the character is in IFS, false otherwise
+ */
+static bool is_ifs(char c)
+{
+    const char *ifs = getenv("IFS");
+
+    if (c == '\0') // since strchr includes the null terminator
+        return false;
+    
+    // Default if IFS is not set
+    if (ifs == NULL)
+        ifs = " \t\n";
+
+    return strchr(ifs, c) != NULL;
+}
+
+/*
+ * scan_field - Extract a field from the input string based on IFS
+ * @param input Pointer to the input string
+ * @param token Pointer to the token to store the extracted field
+ * @return true if a field was extracted, false if no field is found
+ */
+static bool scan_field(char **input, Token *token)
+{
+    token_init(token); // Initialize the token structure
+    
+    // Skip leading IFS characters
+    while (is_ifs(**input))
+        (*input)++;
+
+    // If we reach the end of the string
+    if (**input == '\0')
+        return false; 
+
+    char *start = *input; // Mark the start of the field
+
+    // Move to the end of the field
+    while (**input != '\0' && !is_ifs(**input))
+        (*input)++;
+
+    free(token->text); // Free the old token text to prevent memory leaks
+    token->text = strndup(start, *input - start); // Set the new token text to the extracted field
+
+    return true;
+}
+
+/*
+ * append_token - Append a token to an array of tokens
+ * @param argv Pointer to the array of tokens
+ * @param argc Pointer to the number of tokens in the array
+ * @param capacity Pointer to the capacity of the array
+ * @param new_token The token to append
+ */
+static void append_token(Token **argv, size_t *argc, size_t *capacity, Token *new_token)
+{
+    // If we exceed the buffer size, reallocate more space
+    if (*argc >= *capacity)
+    {
+        *capacity += INITIAL_TOKEN_CAPACITY;
+        *argv = realloc(*argv, (*capacity) * sizeof(Token)); // Allocate memory for the new array of tokens
+
+        if (*argv == NULL)
+        {
+            fprintf(stderr, "Allocation error\n");
+            return;
+        }
+    }
+    
+    (*argv)[*argc] = *new_token; // Copy the new token into the array
+    (*argc)++; // Increment the argument count
+}
+
+/*
+ * word_split - Perform word splitting on a command's tokens
+ * @param cmd The command containing tokens to split
+ */
+static void word_split(Command *cmd)
+{
+    size_t bufsize = INITIAL_TOKEN_CAPACITY;
+    Token *new_argv = malloc(bufsize * sizeof(Token)); // Allocate memory for the new array of tokens
+    size_t new_argc = 0; 
+    if (new_argv == NULL)
+    {
+        fprintf(stderr, "Error: Memory allocation failed during word splitting\n");
+        return; // Return to indicate an error
+    }
+
+    for (size_t i = 0; i < cmd->argc; i++) // Iterate through each of the old tokens in the command
+    {
+        Token *token = &cmd->argv[i];
+        
+        if (!token->word_split)
+        {
+            append_token(&new_argv, &new_argc, &bufsize, token);
+            continue; // No expansion needed if there are no word splits
+        }
+
+        // split the token text into words based on IFS
+        char *p = token->text;
+        Token field;
+
+        while ((scan_field(&p, &field))) 
+            append_token(&new_argv, &new_argc, &bufsize, &field); // Append the new token to the new array of tokens
+
+        free(token->text); // Free the old token text to prevent memory leaks
+    }
+
+    free(cmd->argv); // Free the old array of tokens to prevent memory leaks
+    cmd->argv = new_argv;
+    cmd->argc = new_argc;
+}
+
+/*
  * remove_quotes_token - Remove surrounding quotes from a token's text
  *
  * @param token The token containing the string to remove quotes from
@@ -714,6 +829,6 @@ void expand_variables(Command *cmd)
     expand_parameters(cmd);
     expand_command_arithmetic_expansions(cmd);
     expand_pathname(cmd);
-    // word_split(cmd); // Perform word splitting on the token
+    word_split(cmd);
     remove_quotes(cmd);
 }

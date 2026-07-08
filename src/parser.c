@@ -12,8 +12,6 @@
 #include "parser.h"
 #include "tokens.h"
 
-#define INITIAL_TOKEN_CAPACITY 64 // Initial capacity for the token array
-
 void token_init(Token *token)
 {
     token->type = TOKEN_WORD;
@@ -354,6 +352,8 @@ static void tokenize_line(char *line, Token *token)
         token_start = NULL; // Reset token_start
         return; // Return to indicate an error
     }
+
+    token->word_split = !token->single_quoted && !token->double_quoted; // Mark the token for word splitting if not quoted
 
     token_add_text(token, line, token_end - line); // Add the token text to the Token structure
     // token_print(token); // Print the token for debugging purposes
