@@ -28,4 +28,7 @@ clean:
 tokenize: src/tokenize_line.c
 	$(CC) $(CFLAGS) -o tokenize src/tokenize_line.c
 
+scanner: src/scanner.c
+	$(CC) $(CFLAGS) -o scanner src/scanner.c
+
 .PHONY: all clean
