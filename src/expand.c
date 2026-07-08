@@ -772,7 +772,22 @@ static void remove_quotes_token(Token *token)
     while (*input)
     {
         if (*input == '\\')
-        {
+        {   
+            if (in_single || (in_double && strchr("\"\\`$", *(input + 1)) == NULL)) // In single quotes or next char is not escapable
+            {
+                if (append_char(&sb, *input) == -1) // Append the backslash
+                {
+                    sb_destroy(&sb);
+                    return; // Memory allocation failed
+                }
+            }
+
+            if (in_single && *(input + 1) == '\'') // Single quotes can't be escaped
+            {
+                input++; // Move past the backslash
+                continue;
+            }
+
             if (append_char(&sb, *(input + 1)) == -1) // Append the next character after the backslash
             {
                 sb_destroy(&sb);

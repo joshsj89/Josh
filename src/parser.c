@@ -326,7 +326,20 @@ static void tokenize_line(char *line, Token *token)
         }
         else if (*token_end == '\\')
         {
-            token->escaped = true;
+            if (*(token_end + 1) == '\0') // If the string ends with a backslash, it's an error
+            {
+                fprintf(stderr, "Error: Trailing backslash in input");
+                token_start = NULL; // Reset token_start
+                return; // Return to indicate an error
+            }
+
+            if (in_single_quotes) // Backslashes are treated as literal characters inside single quotes
+            {
+                token_end++; // Move past the backslash
+                continue;
+            }
+            
+            token->escaped = !in_double_quotes && strchr("\\\"'$`", *(token_end + 1)) != NULL; // Check if the next character is escapable
             token_end++; // Skip the next character (escaped character will be treated as a literal)
         }
         else if (!in_single_quotes && !in_double_quotes && *token_end == ')') // Stop tokenizing at closing parenthesis if not in quotes
