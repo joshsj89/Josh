@@ -47,7 +47,7 @@ typedef struct
     bool contains_arithmetic; // Indicates if the token contains arithmetic expansion (e.g., $((1 + 2)))
 
     bool tilde_expand; // Indicates if the token should undergo tilde expansion (e.g., ~/)
-    bool field_split;
+    bool word_split; // Indicates if the token is eligible for word splitting (e.g., unquoted tokens)
     bool pathname_expand; // Indicates if the token should undergo pathname expansion (globbing)
 } Token;
 

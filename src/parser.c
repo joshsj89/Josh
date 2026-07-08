@@ -26,7 +26,7 @@ void token_init(Token *token)
     token->contains_command_substitution = false;
     token->contains_arithmetic = false;
     token->tilde_expand = false;
-    token->field_split = false;
+    token->word_split = false;
     token->pathname_expand = false;
 }
 
@@ -57,7 +57,7 @@ void token_print(const Token *token)
     printf("Contains Command Substitution: %s\n", token->contains_command_substitution ? "true" : "false");
     printf("Contains Arithmetic: %s\n", token->contains_arithmetic ? "true" : "false");
     printf("Tilde Expand: %s\n", token->tilde_expand ? "true" : "false");
-    printf("Field Split: %s\n", token->field_split ? "true" : "false");
+    printf("Word Split: %s\n", token->word_split ? "true" : "false");
     printf("Pathname Expand: %s\n", token->pathname_expand ? "true" : "false");
     printf("------------------------------\n");
 }
