@@ -8,6 +8,18 @@
 #define COLOR_BLUE "\x1b[34m"
 #define COLOR_RESET "\x1b[0m"
 
+/**
+ * Function: get_prompt
+ * ---------------------
+ * Returns the shell prompt.
+ * 
+ * The prompt includes the username, session ID (if available), and the current working directory.
+ * If the current working directory is within the user's home directory, it is displayed as '~'.
+ * The prompt is color-coded for better visibility.
+ * 
+ * Returns:
+ *   A pointer to a static string containing the formatted prompt.
+ */
 const char *get_prompt(void)
 {
     static char prompt[PATH_MAX + 128];
