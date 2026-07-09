@@ -315,7 +315,7 @@ static int expand_command(StringBuilder *sb, const char **input)
  */
 static void expand_tilde_token(Token *token)
 {
-    char *text = token->text;
+    char *text = token->segments[0].text; // tilde expansion is only relevant for the first segment of the token
     char *slash = strchr(text, '/'); // Find the first '/' in the token text
     char *tilde_prefix = NULL;
 
@@ -381,44 +381,25 @@ static void expand_tilde_token(Token *token)
         if (slash) // Append the suffix if it exists
             strcat(new_text, slash);
 
-        free(token->text); // Free the old token text
-        token->text = new_text; // Update the token text with the new expanded string
+        free(token->segments[0].text); // Free the old token text
+        token->segments[0].text = new_text; // Update the token text with the new expanded string
     }
 
     free(tilde_prefix);
 }
 
 /*
- * Function: expand_tilde
- * ----------------------
- * Expands tilde expressions in a command.
- *
- * Parameters:
- *   cmd - A pointer to the Command to expand.
- */
-static void expand_tilde(Command *cmd)
-{
-    for (size_t i = 0; i < cmd->argc; i++)
-    {
-        Token *token = &cmd->argv[i];
-
-        if (token->tilde_expand)
-            expand_tilde_token(token);
-    }
-}
-
-/*
- * Function: expand_parameter_token
+ * Function: expand_parameter_segment
  * -------------------------------
  * Expands parameter references in a token.
  *
  * Parameters:
- *   token - A pointer to the token to expand.
+ *   seg - A pointer to the segment to expand.
  */
-static void expand_parameter_token(Token *token)
+static void expand_parameter_segment(Segment *seg)
 {
-    size_t capacity = strlen(token->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
-    const char *input = token->text;
+    size_t capacity = strlen(seg->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
+    const char *input = seg->text;
     StringBuilder sb;
     if (sb_init(&sb, capacity) == -1)
     {
@@ -490,47 +471,23 @@ static void expand_parameter_token(Token *token)
         }
     }
 
-    free(token->text); // Free the old text to prevent memory leaks
-    token->text = sb.data; // Update the token text with the expanded string
+    free(seg->text); // Free the old text to prevent memory leaks
+    seg->text = sb.data; // Update the segment text with the expanded string
     return; // Return to indicate successful expansion
 }
 
 /*
- * Function: expand_parameters
- * ---------------------------
- * Expands all parameter references in a command.
- *
- * Parameters:
- *   cmd - A pointer to the command whose parameters to expand.
- */
-static void expand_parameters(Command *cmd)
-{
-    for (size_t i = 0; i < cmd->argc; i++)
-    {
-        Token *token = &cmd->argv[i];
-        
-        if (token->single_quoted)
-            continue; // No expansion needed for single-quoted tokens
-
-        if (!token->contains_variable)
-            continue; // No expansion needed if there are no variables
-        
-        expand_parameter_token(token);
-    }
-}
-
-/*
- * Function: expand_command_arithmetic_token
+ * Function: expand_command_arithmetic_segment
  * ----------------------------------------
- * Expands command and arithmetic expansions in a token.
+ * Expands command and arithmetic expansions in a segment.
  *
  * Parameters:
- *   token - A pointer to the token to expand.
+ *   seg - A pointer to the segment to expand.
  */
-static void expand_command_arithmetic_token(Token *token)
+static void expand_command_arithmetic_segment(Segment *seg)
 {
-    size_t capacity = strlen(token->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
-    const char *input = token->text;
+    size_t capacity = strlen(seg->text) + 64; // Initial capacity for the output buffer (safe number to reduce reallocations)
+    const char *input = seg->text;
     StringBuilder sb;
     if (sb_init(&sb, capacity) == -1)
     {
@@ -585,59 +542,52 @@ static void expand_command_arithmetic_token(Token *token)
         }
     }
 
-    free(token->text); // Free the old text to prevent memory leaks
-    token->text = sb.data; // Update the token text with the expanded string
+    free(seg->text); // Free the old text to prevent memory leaks
+    seg->text = sb.data; // Update the segment text with the expanded string
     return; // Return to indicate successful expansion
 }
 
 /*
- * expand_command_arithmetic_expansions - Expand command substitutions and arithmetic expressions in a command
- * @param cmd The command containing tokens to expand
+ * Function: rebuild_token
+ * ------------------------
+ * Rebuilds the full_text of a token by concatenating all its segments.
+ *
+ * Parameters:
+ *   token - A pointer to the Token structure to rebuild.
  */
-static void expand_command_arithmetic_expansions(Command *cmd)
+static void rebuild_token(Token *token)
 {
-    for (size_t i = 0; i < cmd->argc; i++)
+    StringBuilder sb;
+    if (sb_init(&sb, 64) == -1)
     {
-        Token *token = &cmd->argv[i];
-        
-        if (token->single_quoted)
-            continue; // No expansion needed for single-quoted tokens
-
-        if (!token->contains_command_substitution && !token->contains_arithmetic)
-            continue; // No expansion needed if there are no command substitutions or arithmetic expansions
-        
-        expand_command_arithmetic_token(token);
+        fprintf(stderr, "Memory allocation failed\n");
+        return; // Return to indicate an error
     }
+
+    for (size_t i = 0; i < token->segment_count; i++)
+    {
+        Segment *seg = &token->segments[i];
+        if (append_string(&sb, seg->text) == -1)
+        {
+            sb_destroy(&sb);
+            return; // Return to indicate an error
+        }
+    }
+
+    free(token->full_text); // Free the old full_text to prevent memory leaks
+    token->full_text = sb.data; // Update the token's full_text with the new concatenated string
 }
 
 /*
- * expand_pathname - Expand pathname expansions in a command
- * @param cmd The command containing tokens to expand
- */
-static void expand_pathname(Command *cmd)
-{
-    (void)cmd; // Suppress unused parameter warning
-    
-    /*
-    for (size_t i = 0; i < cmd->argc; i++)
-    {
-        Token *token = &cmd->argv[i];
-        
-        if (token->single_quoted || token->double_quoted)
-            continue; // No expansion needed for quoted tokens
-
-        if (!token->pathname_expand)
-            continue; // No expansion needed if there are no pathname expansions
-        
-        fprintf(stderr, "Error: Pathname expansion not implemented");
-    }
-    */
-}
-
-/*
- * is_ifs - Check if a character is in the IFS (Internal Field Separator)
- * @param c The character to check
- * @return true if the character is in IFS, false otherwise
+ * Function: is_ifs
+ * ----------------
+ * Checks if a character is part of the IFS (Internal Field Separator).
+ *
+ * Parameters:
+ *   c - The character to check.
+ *
+ * Returns:
+ *   true if the character is part of IFS, false otherwise.
  */
 static bool is_ifs(char c)
 {
@@ -654,10 +604,16 @@ static bool is_ifs(char c)
 }
 
 /*
- * scan_field - Extract a field from the input string based on IFS
- * @param input Pointer to the input string
- * @param token Pointer to the token to store the extracted field
- * @return true if a field was extracted, false if no field is found
+ * Function: scan_field
+ * --------------------
+ * Extracts a field from the input string based on IFS.
+ *
+ * Parameters:
+ *   input - A pointer to the input string.
+ *   token - A pointer to the token to store the extracted field.
+ *
+ * Returns:
+ *   true if a field was extracted, false if no field is found.
  */
 static bool scan_field(char **input, Token *token)
 {
@@ -677,18 +633,22 @@ static bool scan_field(char **input, Token *token)
     while (**input != '\0' && !is_ifs(**input))
         (*input)++;
 
-    free(token->text); // Free the old token text to prevent memory leaks
-    token->text = strndup(start, *input - start); // Set the new token text to the extracted field
+    free(token->full_text); // Free the old token text to prevent memory leaks
+    token->full_text = strndup(start, *input - start); // Set the new token text to the extracted field
 
     return true;
 }
 
 /*
- * append_token - Append a token to an array of tokens
- * @param argv Pointer to the array of tokens
- * @param argc Pointer to the number of tokens in the array
- * @param capacity Pointer to the capacity of the array
- * @param new_token The token to append
+ * Function: append_token
+ * ----------------------
+ * Appends a token to an array of tokens.
+ *
+ * Parameters:
+ *   argv - A pointer to the array of tokens.
+ *   argc - A pointer to the number of tokens in the array.
+ *   capacity - A pointer to the capacity of the array.
+ *   new_token - The token to append.
  */
 static void append_token(Token **argv, size_t *argc, size_t *capacity, Token *new_token)
 {
@@ -710,8 +670,12 @@ static void append_token(Token **argv, size_t *argc, size_t *capacity, Token *ne
 }
 
 /*
- * word_split - Perform word splitting on a command's tokens
- * @param cmd The command containing tokens to split
+ * Function: word_split
+ * --------------------
+ * Splits tokens into words based on IFS and updates the command's argument list.
+ *
+ * Parameters:
+ *   cmd - A pointer to the command whose tokens to split.
  */
 static void word_split(Command *cmd)
 {
@@ -727,21 +691,32 @@ static void word_split(Command *cmd)
     for (size_t i = 0; i < cmd->argc; i++) // Iterate through each of the old tokens in the command
     {
         Token *token = &cmd->argv[i];
+        bool has_word_split = false; // Flag to indicate if any word splitting occurred
+
+        for (size_t j = 0; j < token->segment_count; j++)
+        {
+            Segment *seg = &token->segments[j];
+            if (seg->allow_word_split) // Check if the segment allows word splitting
+            {
+                has_word_split = true;
+                break; // No need to check further segments
+            }
+        }
         
-        if (!token->word_split)
+        if (!has_word_split) // If no segments allow word splitting, append the token as is
         {
             append_token(&new_argv, &new_argc, &bufsize, token);
-            continue; // No expansion needed if there are no word splits
+            continue;
         }
 
         // split the token text into words based on IFS
-        char *p = token->text;
+        char *p = token->full_text;
         Token field;
 
         while ((scan_field(&p, &field))) 
             append_token(&new_argv, &new_argc, &bufsize, &field); // Append the new token to the new array of tokens
 
-        free(token->text); // Free the old token text to prevent memory leaks
+        free(token->full_text); // Free the old token text to prevent memory leaks
     }
 
     free(cmd->argv); // Free the old array of tokens to prevent memory leaks
@@ -750,84 +725,29 @@ static void word_split(Command *cmd)
 }
 
 /*
- * remove_quotes_token - Remove surrounding quotes from a token's text
+ * Function: expand_pathname
+ * -------------------------
+ * Expands pathname expressions in a command.
  *
- * @param token The token containing the string to remove quotes from
- * 
+ * Parameters:
+ *   cmd - A pointer to the command whose tokens to expand.
  */
-static void remove_quotes_token(Token *token) 
+static void expand_pathname(Command *cmd)
 {
-    char *input = token->text;
-    StringBuilder sb;
-
-    if (token == NULL || token->text == NULL)
-        return; // Return if token or its text is NULL
-
-    if (sb_init(&sb, strlen(input) + 1) == -1)
-        return; // Memory allocation failed
-
-    bool in_single = false;
-    bool in_double = false;
-
-    while (*input)
-    {
-        if (*input == '\\')
-        {   
-            if (in_single || (in_double && strchr("\"\\`$", *(input + 1)) == NULL)) // In single quotes or next char is not escapable
-            {
-                if (append_char(&sb, *input) == -1) // Append the backslash
-                {
-                    sb_destroy(&sb);
-                    return; // Memory allocation failed
-                }
-            }
-
-            if (in_single && *(input + 1) == '\'') // Single quotes can't be escaped
-            {
-                input++; // Move past the backslash
-                continue;
-            }
-
-            if (append_char(&sb, *(input + 1)) == -1) // Append the next character after the backslash
-            {
-                sb_destroy(&sb);
-                return; // Memory allocation failed
-            }
-
-            input += 2; // Skip the next character (escaped character will be treated as a literal)
-            continue;
-        }
-        
-        if (*input == '\'' && token->single_quoted && !in_double)
-            in_single = !in_single; // Toggle single quote state
-        else if (*input == '\"' && token->double_quoted && !in_single)
-            in_double = !in_double; // Toggle double quote state
-        else
-        {
-            if (append_char(&sb, *input) == -1) // Append the character to the result
-            {
-                sb_destroy(&sb);
-                return; // Memory allocation failed
-            }
-        }
-
-        input++;
-    }
-
-    free(token->text); // Free the old text to prevent memory leaks
-    token->text = sb.data; // Update the token text with the modified string
-    token->single_quoted = false; // Reset the single_quoted flag
-    token->double_quoted = false; // Reset the double_quoted flag
-}
-
-/*
- * remove_quotes - Remove surrounding quotes from all tokens in a command
- * @param cmd The command containing tokens to process
- */
-static void remove_quotes(Command *cmd)
-{
+    (void)cmd; // Suppress unused parameter warning
+    
+    /*
     for (size_t i = 0; i < cmd->argc; i++)
-        remove_quotes_token(&cmd->argv[i]);
+    {
+        Token *token = &cmd->argv[i];
+        if (token->single_quoted || token->double_quoted)
+        continue; // No expansion needed for quoted tokens
+
+    if (!token->pathname_expand)
+        continue; // No expansion needed if there are no pathname expansions
+    
+    fprintf(stderr, "Error: Pathname expansion not implemented");
+    */
 }
 
 /**
@@ -840,10 +760,39 @@ static void remove_quotes(Command *cmd)
  */
 void expand_variables(Command *cmd)
 {
-    expand_tilde(cmd);
-    expand_parameters(cmd);
-    expand_command_arithmetic_expansions(cmd);
-    expand_pathname(cmd);
+    for (size_t i = 0; i < cmd->argc; i++)
+    {
+        Token *token = &cmd->argv[i];
+
+        expand_tilde_token(token);
+
+        for (size_t j = 0; j < token->segment_count; j++)
+        {
+            Segment *seg = &token->segments[j];
+
+            switch (seg->type)
+            {
+                case SEG_LITERAL:
+                    // No expansion needed for literal segments
+                    break;
+                case SEG_VARIABLE:
+                    if (seg->quote != QUOTE_SINGLE) // Only expand variables if not single-quoted
+                        expand_parameter_segment(seg);
+                    break;
+                case SEG_COMMAND:
+                case SEG_ARITHMETIC:
+                    if (seg->quote != QUOTE_SINGLE) // Only expand command and arithmetic segments if not single-quoted
+                        expand_command_arithmetic_segment(seg);
+                    break;
+                default:
+                    fprintf(stderr, "Error: Unknown segment type\n");
+                    break;
+            }
+        }
+
+        rebuild_token(token); // Rebuild the token's text after expansion
+    }
+    
     word_split(cmd);
-    remove_quotes(cmd);
+    expand_pathname(cmd);
 }

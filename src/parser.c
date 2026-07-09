@@ -12,52 +12,83 @@
 #include "parser.h"
 #include "tokens.h"
 
+/*
+ * Function: token_init
+ * --------------------
+ * Initializes a Token structure with default values.
+ *
+ * Parameters:
+ *   token - A pointer to the Token structure to initialize.
+ * 
+ */
 void token_init(Token *token)
 {
     token->type = TOKEN_WORD;
-    token->text = NULL;
-    token->quote = QUOTE_NONE;
-    token->single_quoted = false;
-    token->double_quoted = false;
-    token->escaped = false;
-    token->contains_variable = false;
-    token->contains_command_substitution = false;
-    token->contains_arithmetic = false;
+    token->segments = NULL;
+    token->segment_count = 0;
+
+    token->full_text = NULL;
+
     token->tilde_expand = false;
-    token->word_split = false;
-    token->pathname_expand = false;
 }
 
-void token_add_text(Token *token, const char *text, size_t length)
+/*
+ * Function: token_add_segment
+ * ----------------------------
+ * Adds a new segment to the token's segments array.
+ *
+ * Parameters:
+ *   token - A pointer to the Token structure.
+ *   type - The type of the segment.
+ *   text - The text of the segment.
+ *   length - The length of the segment text.
+ *   quote - The type of quotes surrounding the segment, if any.
+ * 
+ */
+void token_add_segment(Token *token, SegmentType type, const char *text, size_t length, QuoteType quote)
 {
-    if (token->text == NULL)
+    token->segments = realloc(token->segments, (token->segment_count + 1) * sizeof(Segment));
+    if (!token->segments)
     {
-        token->text = malloc(length + 1);
-        if (token->text == NULL)
-        {
-            fprintf(stderr, "Memory allocation failed\n");
-            exit(EXIT_FAILURE);
-        }
-        memcpy(token->text, text, length);
-        token->text[length] = '\0'; // Null-terminate the string
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
     }
+
+    // Add the new segment to the token's segments array
+    Segment *seg = &token->segments[token->segment_count++]; // Get a pointer to the new segment
+
+    // Initialize the new segment
+    seg->type = type;
+    seg->text = strndup(text, length);
+    seg->quote = quote;
+    seg->escaped = false;
+    seg->allow_word_split = quote == QUOTE_NONE; // Allow word splitting only if the segment is not quoted
+    seg->pathname_expand = false;
+}
+
+/*
+ * Function: flush_literal
+ * ------------------------
+ * Adds a literal segment to the token's segments array.
+ *
+ * Parameters:
+ *   token - A pointer to the Token structure.
+ *   start - A pointer to the start of the literal text.
+ *   end - A pointer to the end of the literal text.
+ *   quote - The type of quotes surrounding the segment, if any.
+ */
+static void flush_literal(Token *token, const char *start, const char *end, QuoteType quote)
+{
+    if (end > start) // Only add a segment if there is text to add
+        token_add_segment(token, SEG_LITERAL, start, end - start, quote);
 }
 
 void token_print(const Token *token)
 {
     printf("Token Type: %d\n", token->type);
-    printf("Text: %s\n", token->text ? token->text : "NULL");
-    printf("Quote Type: %d\n", token->quote);
-    printf("Single Quoted: %s\n", token->single_quoted ? "true" : "false");
-    printf("Double Quoted: %s\n", token->double_quoted ? "true" : "false");
-    printf("Escaped: %s\n", token->escaped ? "true" : "false");
-    printf("Contains Variable: %s\n", token->contains_variable ? "true" : "false");
-    printf("Contains Command Substitution: %s\n", token->contains_command_substitution ? "true" : "false");
-    printf("Contains Arithmetic: %s\n", token->contains_arithmetic ? "true" : "false");
-    printf("Tilde Expand: %s\n", token->tilde_expand ? "true" : "false");
-    printf("Word Split: %s\n", token->word_split ? "true" : "false");
-    printf("Pathname Expand: %s\n", token->pathname_expand ? "true" : "false");
-    printf("------------------------------\n");
+    printf("Segment Count: %zu\n", token->segment_count);
+    for (size_t i = 0; i < token->segment_count; i++)
+        printf("Segment %zu: %s\n", i, token->segments[i].text);
 }
 
 /**
@@ -198,12 +229,12 @@ int simple_command(const char *input)
  *  from where it left off in subsequent calls (similar to strtok()). For subsequent calls, pass NULL as the line
  *  parameter to continue tokenizing the same input string. token's text will be NULL when there are no more tokens
  *  to parse.
+ * 
  */
 static void tokenize_line(char *line, Token *token)
 {
-    bool in_single_quotes = false;
-    bool in_double_quotes = false;
     token_init(token); // Initialize the token structure
+    QuoteType quote_state = QUOTE_NONE; // Track the current quote state
 
     static char *token_start = NULL; // Pointer to the start of the current token
 
@@ -223,7 +254,7 @@ static void tokenize_line(char *line, Token *token)
         line++;
 
     // If the line is empty after skipping whitespace
-    if (*line == '\0') 
+    if (*line == '\0')
     {
         token_start = NULL; // Reset token_start
         return;
@@ -233,26 +264,29 @@ static void tokenize_line(char *line, Token *token)
         token->tilde_expand = true; // Mark the token for tilde expansion
 
     char *token_end = line; // Pointer to the end of the current token
+    char *segment_start = line; // Pointer to the start of the current segment
     while (*token_end)
     {
         // Stop tokenizing at whitespace if not in quotes or parentheses
-        if (!in_single_quotes && !in_double_quotes && isspace(*token_end))
+        if (quote_state == QUOTE_NONE && isspace(*token_end))
             break;
 
-        if (*token_end == '\'' && !in_double_quotes)
+        if (*token_end == '\'' && quote_state != QUOTE_DOUBLE)
         {
-            in_single_quotes = !in_single_quotes; // Toggle single quote state
-            token->single_quoted = true;
+            flush_literal(token, segment_start, token_end, quote_state); // Flush the literal segment before the quote
+            segment_start = token_end + 1; // Move the segment start to the character after
+            quote_state = quote_state == QUOTE_NONE ? QUOTE_SINGLE : QUOTE_NONE; // Toggle single quote state
         }
-        else if (*token_end == '\"' && !in_single_quotes)
+        else if (*token_end == '\"' && quote_state != QUOTE_SINGLE)
         {
-            in_double_quotes = !in_double_quotes; // Toggle double quote state
-            token->double_quoted = true;
+            flush_literal(token, segment_start, token_end, quote_state); // Flush the literal segment before the quote
+            segment_start = token_end + 1; // Move the segment start to the character after
+            quote_state = quote_state == QUOTE_NONE ? QUOTE_DOUBLE : QUOTE_NONE; // Toggle double quote state
         }
         else if (*token_end == '$' && *(token_end + 1) == '(' && *(token_end + 2) == '(')
         {
-            token->contains_arithmetic = true;
-            
+            flush_literal(token, segment_start, token_end, quote_state); // Flush the literal segment before the variable
+            segment_start = token_end;
             token_end += 3; // Skip past the next three characters (the opening parentheses)
 
             int expr_length = expression(token_end); // Get the length of the expression inside $(())
@@ -271,12 +305,14 @@ static void tokenize_line(char *line, Token *token)
             }
 
             token_end += 2; // Skip past the closing parentheses
+            token_add_segment(token, SEG_ARITHMETIC, segment_start, token_end - segment_start, quote_state);
+            segment_start = token_end; // Move the segment start to the character after
             continue;
         }
         else if (*token_end == '$' && *(token_end + 1) == '(')
         {
-            token->contains_command_substitution = true;
-            
+            flush_literal(token, segment_start, token_end, quote_state); // Flush the literal segment before the variable
+            segment_start = token_end;
             token_end += 2; // Skip past the next two characters (the opening parenthesis)
 
             int cmd_length = simple_command(token_end); // Get the length of the simple command inside $()
@@ -295,20 +331,27 @@ static void tokenize_line(char *line, Token *token)
             }
 
             token_end++; // Skip past the closing parenthesis
+            token_add_segment(token, SEG_COMMAND, segment_start, token_end - segment_start, quote_state);
+            segment_start = token_end; // Move the segment start to the character after
             continue;
         }
         else if (*token_end == '$' && (isalpha(*(token_end + 1)) || *(token_end + 1) == '_' || *(token_end + 1) == '$' || *(token_end + 1) == '?')) // Check for variable expansion
         {
-            token->contains_variable = true;
+            flush_literal(token, segment_start, token_end, quote_state); // Flush the literal segment before the variable
+            segment_start = token_end;
             token_end++; // Move past the '$' character
 
             while (isalnum(*token_end) || *token_end == '_') // Move through the variable name
                 token_end++;
+
+            token_add_segment(token, SEG_VARIABLE, segment_start, token_end - segment_start, quote_state);
+            segment_start = token_end; // Move the segment start to the character after
             continue;
         }
         else if (*token_end == '$' && *(token_end + 1) == '{') // Check for variable expansion with braces
         {
-            token->contains_variable = true;
+            flush_literal(token, segment_start, token_end, quote_state); // Flush the literal segment before the variable
+            segment_start = token_end;
             token_end += 2; // Move past the '${' characters
 
             while (isalnum(*token_end) || *token_end == '_') // Move through the variable name
@@ -322,6 +365,8 @@ static void tokenize_line(char *line, Token *token)
             }
 
             token_end++; // Move past the closing brace
+            token_add_segment(token, SEG_VARIABLE, segment_start, token_end - segment_start, quote_state);
+            segment_start = token_end; // Move the segment start to the character after
             continue;
         }
         else if (*token_end == '\\')
@@ -333,16 +378,16 @@ static void tokenize_line(char *line, Token *token)
                 return; // Return to indicate an error
             }
 
-            if (in_single_quotes) // Backslashes are treated as literal characters inside single quotes
+            if (quote_state == QUOTE_SINGLE) // Backslashes are treated as literal characters inside single quotes
             {
                 token_end++; // Move past the backslash
                 continue;
             }
             
-            token->escaped = !in_double_quotes && strchr("\\\"'$`", *(token_end + 1)) != NULL; // Check if the next character is escapable
+            // token->escaped = quote_state != QUOTE_DOUBLE && strchr("\\\"'$`", *(token_end + 1)) != NULL; // Check if the next character is escapable
             token_end++; // Skip the next character (escaped character will be treated as a literal)
         }
-        else if (!in_single_quotes && !in_double_quotes && *token_end == ')') // Stop tokenizing at closing parenthesis if not in quotes
+        else if (quote_state == QUOTE_NONE && *token_end == ')') // Stop tokenizing at closing parenthesis if not in quotes
         {
             fprintf(stderr, "syntax error near unexpected token `)'");
             token_start = NULL; // Reset token_start
@@ -352,23 +397,22 @@ static void tokenize_line(char *line, Token *token)
         token_end++;
     }
 
-    if (in_double_quotes)
+    flush_literal(token, segment_start, token_end, quote_state); // Flush any remaining literal segment
+
+    if (quote_state == QUOTE_DOUBLE)
     {
         fprintf(stderr, "Error: Unmatched double quotes in input");
         token_start = NULL; // Reset token_start
         return; // Return to indicate an error
     }
 
-    if (in_single_quotes)
+    if (quote_state == QUOTE_SINGLE)
     {
         fprintf(stderr, "Error: Unmatched single quotes in input");
         token_start = NULL; // Reset token_start
         return; // Return to indicate an error
     }
 
-    token->word_split = !token->single_quoted && !token->double_quoted; // Mark the token for word splitting if not quoted
-
-    token_add_text(token, line, token_end - line); // Add the token text to the Token structure
     // token_print(token); // Print the token for debugging purposes
 
     // If we reached the end of the line, return the last token
@@ -421,7 +465,7 @@ Command *parse_line(char *line)
     }
 
     tokenize_line(line, &token); // Get the first token from the input line
-    while (token.text != NULL)
+    while (token.segments != NULL)
     {
         command->argv[command->argc++] = token;
 
@@ -460,7 +504,11 @@ void free_command(Command *cmd)
         return; // Nothing to free
 
     for (size_t i = 0; i < cmd->argc; i++)
-        free(cmd->argv[i].text); // Free the text of each token
+    {
+        for (size_t j = 0; j < cmd->argv[i].segment_count; j++)
+            free(cmd->argv[i].segments[j].text); // Free the text of each segment
+        free(cmd->argv[i].segments); // Free the segments array
+    }
 
     // Free the array of token pointers
     free(cmd->argv);

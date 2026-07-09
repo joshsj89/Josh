@@ -48,7 +48,7 @@ char **command_to_argv(const Command *cmd)
 
     for (size_t i = 0; i < cmd->argc; i++)
         if (cmd->argv[i].type == TOKEN_WORD)
-            argv[i] = cmd->argv[i].text; // Assign the text of each token to argv
+            argv[i] = cmd->argv[i].full_text; // Assign the text of each token to argv
 
     argv[cmd->argc] = NULL; // Null-terminate the array
 
@@ -73,7 +73,7 @@ char **command_to_argv(const Command *cmd)
 void execute_command(Command *cmd)
 {
     // Check if there is a command to execute
-    if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].text == NULL)
+    if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].full_text == NULL)
     {
         return; // No command entered, return without doing anything
     } // No command entered, return without doing anything
@@ -94,12 +94,12 @@ void execute_command(Command *cmd)
     {
         // In the child process, replace it with the command using execvp
         char **argv = command_to_argv(cmd); // Convert Command to argv array
-        if (execvp(cmd->argv[0].text, argv) < 0) // execvp returns only on error
+        if (execvp(cmd->argv[0].full_text, argv) < 0) // execvp returns only on error
         {
-            if (errno == ENOENT && strchr(cmd->argv[0].text, '/') == NULL) // Command not found and no '/' in command
-                fprintf(stderr, "%s: command not found\n", cmd->argv[0].text); // Handle command not found error
+            if (errno == ENOENT && strchr(cmd->argv[0].full_text, '/') == NULL) // Command not found and no '/' in command
+                fprintf(stderr, "%s: command not found\n", cmd->argv[0].full_text); // Handle command not found error
             else
-                perror(cmd->argv[0].text); // Handle execvp error
+                perror(cmd->argv[0].full_text); // Handle execvp error
 
             free(argv); // Free the allocated argv array before exiting
             exit(EXIT_FAILURE);

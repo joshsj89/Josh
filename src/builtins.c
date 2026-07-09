@@ -33,7 +33,7 @@ int shell_cd(Command *cmd)
     if (getcwd(oldpwd, sizeof(oldpwd)) == NULL)
         oldpwd[0] = '\0'; // If getcwd fails, set oldpwd to an empty string
 
-    if (cmd->argv[1].text == NULL) // no argument provided
+    if (cmd->argv[1].full_text == NULL) // no argument provided
     {
         if (chdir(getenv("HOME")) != 0) // change to home directory
         {
@@ -41,7 +41,7 @@ int shell_cd(Command *cmd)
             return 1;
         }
     }
-    else if (strcmp(cmd->argv[1].text, "-") == 0) // change to previous directory
+    else if (strcmp(cmd->argv[1].full_text, "-") == 0) // change to previous directory
     {
         const char *prev_dir = getenv("OLDPWD");
         if (prev_dir == NULL || chdir(prev_dir) != 0)
@@ -52,9 +52,9 @@ int shell_cd(Command *cmd)
     }
     else
     {
-        if (chdir(cmd->argv[1].text) != 0)
+        if (chdir(cmd->argv[1].full_text) != 0)
         {
-            fprintf(stderr, "cd: %s: %s\n", cmd->argv[1].text, strerror(errno));
+            fprintf(stderr, "cd: %s: %s\n", cmd->argv[1].full_text, strerror(errno));
             return 1;
         }
     }
@@ -99,20 +99,20 @@ int shell_exit(Command *cmd)
  */
 int execute_builtin(Command *cmd)
 {
-    if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].text == NULL)
+    if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].full_text == NULL)
     {
         return 0; // No command entered
     }
 
-    if (strcmp(cmd->argv[0].text, "cd") == 0)
+    if (strcmp(cmd->argv[0].full_text, "cd") == 0)
     {
         return shell_cd(cmd);
     }
-    else if (strcmp(cmd->argv[0].text, "exit") == 0)
+    else if (strcmp(cmd->argv[0].full_text, "exit") == 0)
     {
         return shell_exit(cmd);
     }
-    else if (strcmp(cmd->argv[0].text, "history") == 0)
+    else if (strcmp(cmd->argv[0].full_text, "history") == 0)
     {
         history_print();
         return 1; // Indicate that the command was executed successfully
