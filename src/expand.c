@@ -5,7 +5,7 @@
  * 
  * TODO:
  *  - Implement support for shell variables and special variables (e.g., $?, $!, etc.).
- *  - Implement support for arithmetic expansion (e.g., $((expression))).
+ *  - Build a custom parser for arithmetic expansion (e.g., $((expression))) rather than delegating to Bash.
  *  - Implement support for Bash string manipulation (e.g., ${VAR#pattern}, ${VAR%pattern}, etc.).
  *  - Implement support for escaping the '$' character (e.g., \$VAR should not expand).
  *  - Implement support for expanding variables in double-quoted strings while preserving spaces.
@@ -305,6 +305,68 @@ static int expand_command(StringBuilder *sb, const char **input)
     return 0; // Return 0 to indicate success
 }
 
+static int expand_arithmetic(StringBuilder *sb, const char **input)
+{
+    char expr[1024];
+    char command[1024 + 10];
+    int expr_length = expression(*input); // Get the length of the expression inside $(())
+    if (expr_length == -1) // Check for syntax error in expression
+    {
+        sb_destroy(sb);
+        return -1; // Return -1 to indicate an error
+    }
+
+    if (**input && expr_length < (int)sizeof(expr) - 1)
+    {
+        memcpy(expr, *input, expr_length); // Copy the expression into the expr buffer
+        expr[expr_length] = '\0'; // Null-terminate the expr string
+        (*input) += expr_length; // Move the input pointer past the expression
+    }
+    else
+    {
+        fprintf(stderr, "Error: Expression too long for arithmetic expansion\n");
+        sb_destroy(sb);
+        return -1; // Return -1 to indicate an error
+    }
+
+    if (**input == ')' && *(*input + 1) == ')') // Move past the closing parentheses if present
+        (*input) += 2;
+    else
+    {
+        fprintf(stderr, "Error: Missing closing '))' for arithmetic expansion\n");
+        sb_destroy(sb);
+        return -1; // Return -1 to indicate an error
+    }
+    
+    snprintf(command, sizeof(command), "echo $((%s))", expr);
+
+    FILE *fp = popen(command, "r"); // Execute the command and open a pipe to read its output
+    if (fp == NULL) // Command execution failed
+    {
+        sb_destroy(sb);
+        return -1;
+    }
+
+    char buffer[1024];
+    if (fgets(buffer, sizeof(buffer), fp) != NULL) // Read the command output
+    {
+        // Remove the trailing newline character from the output
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len - 1] == '\n')
+            buffer[len - 1] = '\0';
+
+        if (append_string(sb, buffer) == -1) // Append the command output to the StringBuilder
+        {
+            pclose(fp);
+            sb_destroy(sb);
+            return -1; // Return -1 to indicate an error
+        }
+    }
+
+    pclose(fp); // Close the pipe
+    return 0;
+}
+
 /*
  * Function: expand_tilde_token
  * ----------------------------
@@ -527,10 +589,9 @@ static void expand_command_arithmetic_segment(Segment *seg)
 
                 if (*(input + 1) == '(') // Check for arithmetic expansion
                 {
-                    // Handle arithmetic expansion here (not implemented)
-                    fprintf(stderr, "Error: Arithmetic expansion not implemented");
-                    sb_destroy(&sb);
-                    return; // Return to indicate an error
+                    input += 2; // Move past the '((' characters
+                    if (expand_arithmetic(&sb, &input) == -1)
+                        return; // Return to indicate an error
                 }
                 else // Handle command substitution
                 {

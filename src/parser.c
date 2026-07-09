@@ -101,7 +101,7 @@ void token_print(const Token *token)
  * The length returned is the number of characters processed in the expression. 
  * input + length will point to the character after the expression, which is useful for further processing of the input string.
  */
-static int expression(const char *input)
+int expression(const char *input)
 {
     int depth = 0; // Track the depth of nested parentheses
     int length = 0; // Track the length of the expression

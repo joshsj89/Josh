@@ -8,6 +8,7 @@
 int simple_command(const char *input);
 
 Command *parse_line(char *line);
+int expression(const char *input);
 void free_command(Command *cmd);
 
 #endif /* PARSER_H */
