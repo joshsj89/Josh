@@ -554,14 +554,20 @@ static void expand_command_arithmetic_segment(Segment *seg)
  *
  * Parameters:
  *   token - A pointer to the Token structure to rebuild.
+ * 
+ * Returns:
+ *   A pointer to the newly allocated string containing the concatenated segments.
+ *  
+ * Note:
+ *   The caller is responsible for freeing this string when it is no longer needed.
  */
-static void rebuild_token(Token *token)
+static char *rebuild_token(const Token *token)
 {
     StringBuilder sb;
     if (sb_init(&sb, 64) == -1)
     {
         fprintf(stderr, "Memory allocation failed\n");
-        return; // Return to indicate an error
+        return NULL; // Return NULL to indicate an error
     }
 
     for (size_t i = 0; i < token->segment_count; i++)
@@ -570,12 +576,11 @@ static void rebuild_token(Token *token)
         if (append_string(&sb, seg->text) == -1)
         {
             sb_destroy(&sb);
-            return; // Return to indicate an error
+            return NULL; // Return to indicate an error
         }
     }
 
-    free(token->full_text); // Free the old full_text to prevent memory leaks
-    token->full_text = sb.data; // Update the token's full_text with the new concatenated string
+    return sb.data; // Return the new concatenated string
 }
 
 /*
@@ -672,56 +677,22 @@ static void append_token(Token **argv, size_t *argc, size_t *capacity, Token *ne
 /*
  * Function: word_split
  * --------------------
- * Splits tokens into words based on IFS and updates the command's argument list.
+ * Splits a token into words based on IFS and appends them to an array of tokens.
  *
  * Parameters:
- *   cmd - A pointer to the command whose tokens to split.
+ *   token - A pointer to the token to split.
+ *   argv - A pointer to the array of tokens.
+ *   argc - A pointer to the number of tokens in the array.
+ *   capacity - A pointer to the capacity of the array.
  */
-static void word_split(Command *cmd)
+static void word_split(Token *token, Token **argv, size_t *argc, size_t *capacity)
 {
-    size_t bufsize = INITIAL_TOKEN_CAPACITY;
-    Token *new_argv = malloc(bufsize * sizeof(Token)); // Allocate memory for the new array of tokens
-    size_t new_argc = 0; 
-    if (new_argv == NULL)
-    {
-        fprintf(stderr, "Error: Memory allocation failed during word splitting\n");
-        return; // Return to indicate an error
-    }
+    // split the token text into words based on IFS
+    char *p = token->full_text;
+    Token field;
 
-    for (size_t i = 0; i < cmd->argc; i++) // Iterate through each of the old tokens in the command
-    {
-        Token *token = &cmd->argv[i];
-        bool has_word_split = false; // Flag to indicate if any word splitting occurred
-
-        for (size_t j = 0; j < token->segment_count; j++)
-        {
-            Segment *seg = &token->segments[j];
-            if (seg->allow_word_split) // Check if the segment allows word splitting
-            {
-                has_word_split = true;
-                break; // No need to check further segments
-            }
-        }
-        
-        if (!has_word_split) // If no segments allow word splitting, append the token as is
-        {
-            append_token(&new_argv, &new_argc, &bufsize, token);
-            continue;
-        }
-
-        // split the token text into words based on IFS
-        char *p = token->full_text;
-        Token field;
-
-        while ((scan_field(&p, &field))) 
-            append_token(&new_argv, &new_argc, &bufsize, &field); // Append the new token to the new array of tokens
-
-        free(token->full_text); // Free the old token text to prevent memory leaks
-    }
-
-    free(cmd->argv); // Free the old array of tokens to prevent memory leaks
-    cmd->argv = new_argv;
-    cmd->argc = new_argc;
+    while ((scan_field(&p, &field))) 
+        append_token(argv, argc, capacity, &field); // Append the newly created field token to the array of tokens
 }
 
 /*
@@ -751,6 +722,28 @@ static void expand_pathname(Command *cmd)
 }
 
 /**
+ * Function: needs_word_split
+ * --------------------------
+ * Determines if a token requires word splitting.
+ *
+ * Parameters:
+ *   token - A pointer to the token to check
+ *
+ * Returns:
+ *   true if the token requires word splitting, false otherwise
+ */
+static bool needs_word_split(const Token *token)
+{
+    for (size_t j = 0; j < token->segment_count; j++)
+    {
+        Segment *seg = &token->segments[j];
+        if (seg->allow_word_split) // Check if the segment allows word splitting
+            return true; // If any segment allows word splitting, return true
+    }
+    return false; // No segments allow word splitting
+}
+
+/*
  * Function: expand_variables
  * --------------------------
  * Expands variables, command substitutions, and arithmetic expressions in all tokens of a command.
@@ -760,6 +753,10 @@ static void expand_pathname(Command *cmd)
  */
 void expand_variables(Command *cmd)
 {
+    size_t bufsize = INITIAL_TOKEN_CAPACITY;
+    Token *new_argv = malloc(bufsize * sizeof(Token));
+    size_t new_argc = 0;
+    
     for (size_t i = 0; i < cmd->argc; i++)
     {
         Token *token = &cmd->argv[i];
@@ -790,9 +787,18 @@ void expand_variables(Command *cmd)
             }
         }
 
-        rebuild_token(token); // Rebuild the token's text after expansion
+        free(token->full_text);
+        token->full_text = rebuild_token(token); // Rebuild the token's text after expansion
+        
+        if (needs_word_split(token)) // Check if the token requires word splitting
+            word_split(token, &new_argv, &new_argc, &bufsize); // Split the token into words and append to new_argv
+        else
+            append_token(&new_argv, &new_argc, &bufsize, token); // Append the token as is to new_argv
     }
+
+    free(cmd->argv);
+    cmd->argv = new_argv;
+    cmd->argc = new_argc;
     
-    word_split(cmd);
     expand_pathname(cmd);
 }

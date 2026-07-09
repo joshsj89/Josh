@@ -62,7 +62,7 @@ void token_add_segment(Token *token, SegmentType type, const char *text, size_t 
     seg->text = strndup(text, length);
     seg->quote = quote;
     seg->escaped = false;
-    seg->allow_word_split = quote == QUOTE_NONE; // Allow word splitting only if the segment is not quoted
+    seg->allow_word_split = quote == QUOTE_NONE && type != SEG_LITERAL; // Allow word splitting only if the segment is not quoted
     seg->pathname_expand = false;
 }
 
