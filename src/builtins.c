@@ -22,8 +22,6 @@
  * Returns:
  *   1 if the command was executed successfully
  * 
- * TODO:
- *  - Implement handling for "cd ~" to change to the home directory (~ gets expanded to the user's home directory)
  */
 int shell_cd(Command *cmd)
 {
