@@ -305,6 +305,18 @@ static int expand_command(StringBuilder *sb, const char **input)
     return 0; // Return 0 to indicate success
 }
 
+/*
+ * Function: expand_arithmetic
+ * ----------------------------
+ * Expands an arithmetic expression and returns its value.
+ *
+ * Parameters:
+ *   sb - A pointer to the StringBuilder to append the result to.
+ *   input - A pointer to the input string containing the arithmetic expression.
+ *
+ * Returns:
+ *   0 on success, -1 on failure.
+ */
 static int expand_arithmetic(StringBuilder *sb, const char **input)
 {
     char expr[1024];
