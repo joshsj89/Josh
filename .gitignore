@@ -1,4 +1,4 @@
 *.o
 josh
-tokenize
+tokenizer
 scanner

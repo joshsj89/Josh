@@ -25,8 +25,8 @@ $(TARGET): $(OBJ)
 clean:
 	$(RM) $(OBJ) $(TARGET)
 
-tokenize: src/tokenize_line.c
-	$(CC) $(CFLAGS) -o tokenize src/tokenize_line.c
+tokenizer: src/tokenize_line.c
+	$(CC) $(CFLAGS) -o tokenizer src/tokenize_line.c
 
 scanner: src/scanner.c
 	$(CC) $(CFLAGS) -o scanner src/scanner.c
