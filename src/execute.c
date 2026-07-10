@@ -134,6 +134,7 @@ char **command_to_argv(const Command *cmd)
         fprintf(stderr, "Memory allocation failed\n");
         return NULL; // Return NULL to indicate an error
     }
+
     size_t j = 0; // used to index into argv, skipping non-word tokens
     for (size_t i = 0; i < cmd->argc; i++)
     {
@@ -170,14 +171,10 @@ void execute_command(Command *cmd)
 {
     // Check if there is a command to execute
     if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].full_text == NULL)
-    {
         return; // No command entered, return without doing anything
-    } // No command entered, return without doing anything
 
     if (execute_builtin(cmd)) // Check if the command is a built-in command
-    {
         return; // Built-in command executed, return without creating a child process
-    }
 
     // Create a child process to execute the command
     pid_t pid = fork();
