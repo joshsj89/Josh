@@ -5,10 +5,11 @@
     * which is responsible for executing commands with their respective arguments.
     * 
     * TODO:
-    * - Implement support for input/output redirection, piping, and background jobs (&).
+    * - Implement support for piping and background jobs (&).
 */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +20,95 @@
 #include "execute.h"
 #include "tokens.h"
 
-/**
+/*
+ * Function: is_redirection
+ * -------------------------
+ * Checks if a token represents a redirection operator.
+ *
+ * Parameters:
+ *   type - The type of the token to check
+ *
+ * Returns:
+ *   true if the token is a redirection operator, false otherwise
+ */
+static bool is_redirection(TokenType type)
+{
+    return type == TOKEN_REDIRECT_IN || 
+            type == TOKEN_REDIRECT_OUT || 
+            type == TOKEN_APPEND;
+}
+
+/*
+ * Function: apply_redirections
+ * -----------------------------
+ * Applies input/output redirections to the command.
+ *
+ * Parameters:
+ *   cmd - A pointer to the Command structure containing the command and its arguments
+ *
+ * Returns:
+ *   0 if successful, -1 if an error occurs
+ */
+static int apply_redirections(Command *cmd)
+{
+    for (size_t i = 0; i < cmd->argc; i++)
+    {
+        Token *token = &cmd->argv[i];
+
+        if (is_redirection(token->type))
+        {
+            if (i + 1 >= cmd->argc || cmd->argv[i + 1].type != TOKEN_WORD)
+            {
+                fprintf(stderr, "syntax error: expected filename after '%c'\n", token->type);
+                return -1;
+            }
+
+            const char *filename = cmd->argv[i + 1].full_text;
+            int fd;
+
+            if (token->type == TOKEN_REDIRECT_IN)
+                fd = open(filename, O_RDONLY);
+            else if (token->type == TOKEN_REDIRECT_OUT)
+                fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            else if (token->type == TOKEN_APPEND)
+                fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644); 
+            else
+                continue;
+
+            if (fd < 0)
+            {
+                perror("open");
+                return -1;
+            }
+
+            if (token->type == TOKEN_REDIRECT_IN)
+            {
+                if (dup2(fd, STDIN_FILENO) < 0)
+                {
+                    perror("dup2");
+                    close(fd);
+                    return -1;
+                }
+            }
+            else // TOKEN_REDIRECT_OUT or TOKEN_APPEND
+            {
+                if (dup2(fd, STDOUT_FILENO) < 0)
+                {
+                    perror("dup2");
+                    close(fd);
+                    return -1;
+                }
+            }
+
+            close(fd); // Close the file descriptor after duplicating
+            i++; // Skip the next token since it's the filename
+        }
+    }
+
+    return 0;
+}
+
+/*
  * Function: command_to_argv
  * --------------------------
  * Converts a Command structure to an array of strings suitable for execvp.
@@ -45,12 +134,19 @@ char **command_to_argv(const Command *cmd)
         fprintf(stderr, "Memory allocation failed\n");
         return NULL; // Return NULL to indicate an error
     }
-
+    size_t j = 0; // used to index into argv, skipping non-word tokens
     for (size_t i = 0; i < cmd->argc; i++)
-        if (cmd->argv[i].type == TOKEN_WORD)
-            argv[i] = cmd->argv[i].full_text; // Assign the text of each token to argv
+    {
+        if (is_redirection(cmd->argv[i].type)) 
+        {
+            i++; // Skip the next token (filename for redirection)
+            continue;
+        }
 
-    argv[cmd->argc] = NULL; // Null-terminate the array
+        argv[j++] = cmd->argv[i].full_text; // Assign the text of each token to argv
+    }
+
+    argv[j] = NULL; // Null-terminate the array
 
     return argv;
 }
@@ -92,6 +188,9 @@ void execute_command(Command *cmd)
     }
     else if (pid == 0) // child process
     {
+        if (apply_redirections(cmd) == -1) // Apply any input/output redirections
+            exit(EXIT_FAILURE); // Exit if redirection fails
+        
         // In the child process, replace it with the command using execvp
         char **argv = command_to_argv(cmd); // Convert Command to argv array
         if (execvp(cmd->argv[0].full_text, argv) < 0) // execvp returns only on error

@@ -13,6 +13,92 @@
 #include "tokens.h"
 
 /*
+ * Function: is_operator_char
+ * --------------------------
+ * Checks if a character is an operator character.
+ *
+ * Parameters:
+ *   c - The character to check.
+ *
+ * Returns:
+ *   true if the character is an operator character, false otherwise.
+ */
+static bool is_operator_char(char c)
+{
+    switch (c)
+    {
+        case '&':
+        case '(':
+        case ')':
+        case ';':
+        case '<':
+        case '>':
+        case '|':
+            return true;
+        default:
+            return false;
+    }
+}
+
+/*
+ * Function: operator_type
+ * -----------------------
+ * Determines the type of an operator based on its character representation.
+ *
+ * Parameters:
+ *   p - A pointer to the operator character.
+ *   length - A pointer to the length of the operator.
+ *
+ * Returns:
+ *   The type of the operator.
+ */
+static TokenType operator_type(const char *p, size_t *length)
+{
+    switch (*p)
+    {
+        case '&':
+            if (p[1] == '&')
+            {
+                *length = 2;
+                return TOKEN_AND;
+            }
+            *length = 1;
+            return TOKEN_BACKGROUND;
+        case '|':
+            if (p[1] == '|')
+            {
+                *length = 2;
+                return TOKEN_OR;
+            }
+            *length = 1;
+            return TOKEN_PIPE;
+        case '>':
+            if (p[1] == '>')
+            {
+                *length = 2;
+                return TOKEN_APPEND;
+            }
+            *length = 1;
+            return TOKEN_REDIRECT_OUT;
+        case '(':
+            *length = 1;
+            return TOKEN_LPAREN;
+        case ')':
+            *length = 1;
+            return TOKEN_RPAREN;
+        case ';':
+            *length = 1;
+            return TOKEN_SEMICOLON;
+        case '<':
+            *length = 1;
+            return TOKEN_REDIRECT_IN;
+        default:
+            *length = 1;
+            return TOKEN_WORD; // Default to TOKEN_WORD for non-operator characters
+    }
+}
+
+/*
  * Function: token_init
  * --------------------
  * Initializes a Token structure with default values.
@@ -260,6 +346,19 @@ static void tokenize_line(char *line, Token *token)
         return;
     }
 
+    size_t op_length = 0; // Length of the operator, if any
+    TokenType op_type = operator_type(line, &op_length); // Determine the operator type and length
+
+    if (op_type != TOKEN_WORD) // If the current character is an operator
+    {
+        token->type = op_type;
+        token->full_text = strndup(line, op_length);
+        token_start = line + op_length; // Move the start position for the next token
+
+        token_add_segment(token, SEG_LITERAL, line, op_length, QUOTE_NONE);
+        return;
+    }
+
     if (*line == '~') // Check for tilde expansion (i.e. 1st character is a tilde)
         token->tilde_expand = true; // Mark the token for tilde expansion
 
@@ -267,9 +366,15 @@ static void tokenize_line(char *line, Token *token)
     char *segment_start = line; // Pointer to the start of the current segment
     while (*token_end)
     {
-        // Stop tokenizing at whitespace if not in quotes or parentheses
-        if (quote_state == QUOTE_NONE && isspace(*token_end))
-            break;
+        // Stop tokenizing at whitespace or operators if not in quotes or parentheses
+        if (quote_state == QUOTE_NONE)
+        {
+            if (isspace(*token_end))
+                break;
+
+            if (is_operator_char(*token_end))
+                break;
+        }
 
         if (*token_end == '\'' && quote_state != QUOTE_DOUBLE)
         {
@@ -422,8 +527,10 @@ static void tokenize_line(char *line, Token *token)
         return; // Return to indicate no more tokens
     }
 
-    *token_end = '\0'; // Terminate the token
-    token_start = token_end + 1; // Update the start position for the next token
+    if (is_operator_char(*token_end)) // If we reached an operator, return the token and prepare for the next one
+        token_start = token_end; // Set the start position for the next token
+    else
+        token_start = token_end + 1; // Update the start position for the next token
 }
 
 /**
