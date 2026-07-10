@@ -7,16 +7,18 @@
 typedef enum TokenType
 {
     TOKEN_WORD,
-    TOKEN_PIPE,
+    
+    TOKEN_BACKGROUND = '&',
+    TOKEN_LPAREN = '(',
+    TOKEN_RPAREN = ')',
+    TOKEN_SEMICOLON = ';',
+    TOKEN_REDIRECT_IN = '<',
+    TOKEN_REDIRECT_OUT = '>',
+    TOKEN_PIPE = '|',
+
     TOKEN_AND,
     TOKEN_OR,
-    TOKEN_REDIRECT_IN,
-    TOKEN_REDIRECT_OUT,
     TOKEN_APPEND,
-    TOKEN_BACKGROUND,
-    TOKEN_SEMICOLON,
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
     TOKEN_EOF
 } TokenType;
 
