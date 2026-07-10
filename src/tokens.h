@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef enum
+typedef enum TokenType
 {
     TOKEN_WORD,
     TOKEN_PIPE,
@@ -20,7 +20,7 @@ typedef enum
     TOKEN_EOF
 } TokenType;
 
-typedef enum
+typedef enum SegmentType
 {
     SEG_LITERAL,
     SEG_VARIABLE, // Indicates if the segment contains a variable (e.g., $VAR)
@@ -28,7 +28,7 @@ typedef enum
     SEG_ARITHMETIC // Indicates if the segment contains an arithmetic expansion (e.g., $((1 + 2)))
 } SegmentType;
 
-typedef enum
+typedef enum QuoteType
 {
     QUOTE_NONE,
     QUOTE_SINGLE, // Indicates if the segment is enclosed in single quotes
