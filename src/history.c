@@ -106,9 +106,7 @@ static void save_history(void)
     }
 
     if (fclose(file) != 0) // Check for errors when closing the file
-    {
         fprintf(stderr, "Error closing history file\n");
-    }
 }
 
 /*
@@ -212,9 +210,7 @@ const char *history_previous(void)
         return NULL;
 
     if (history_cursor < history_count) // If the cursor is not at the oldest command
-    {
         history_cursor++; // Move the cursor to the previous command
-    }
 
     int index = (history_start + history_count - history_cursor) % HISTORY_SIZE; // Calculate the index of the command in the circular buffer
     return history[index]; // Return the previous command
@@ -226,9 +222,7 @@ const char *history_next(void)
         return NULL;
 
     if (history_cursor > 0) // If the cursor is not at the newest command
-    {
         history_cursor--; // Move the cursor to the next command
-    }
 
     if (history_cursor == 0) // If the cursor is at the newest command, return an empty string
         return "";

@@ -447,8 +447,11 @@ char *line_editor_read(void)
             if (cursor_position > 0) // Ensure there is a word to delete
             {
                 size_t new_cursor_position = cursor_position;
-                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] == ' ') new_cursor_position--; // Skip spaces
-                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] != ' ') new_cursor_position--; // Find start of word
+                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] == ' ') // Skip spaces
+                    new_cursor_position--;
+                
+                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] != ' ') // Find start of word
+                    new_cursor_position--;
 
                 memmove(buffer + new_cursor_position, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the left (+1 includes null terminator)
                 length -= (cursor_position - new_cursor_position); // Update length of input line
@@ -477,6 +480,45 @@ char *line_editor_read(void)
                 redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
             }
         }
+        // else if (c == ctrl_key('r')) // Check for Ctrl+R (reverse search in history)
+        // {
+        //     const char *search_result = history_reverse_search(); // Get the result of the reverse search from history
+        //     if (search_result != NULL) // Check if a matching command was found
+        //     {
+        //         snprintf(buffer, buffer_size, "%s", search_result); // Copy the matching command into the buffer
+        //         length = strlen(buffer); // Update the length of the input line
+        //         cursor_position = length; // Move cursor to the end of the line
+
+        //         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+        //     }
+        // }
+        // else if (c == ctrl_key('y')) // Check for Ctrl+Y (paste last deleted text)
+        // {
+        //     const char *last_deleted = history_last_deleted(); // Get the last deleted text from history
+        //     if (last_deleted != NULL) // Check if there is any deleted text to paste
+        //     {
+        //         size_t last_deleted_length = strlen(last_deleted); // Get the length of the last deleted text
+        //         if (length + last_deleted_length >= buffer_size) // Check if buffer needs to be resized
+        //         {
+        //             buffer_size = length + last_deleted_length + 1; // Update buffer size to accommodate the new text
+        //             char *new_buffer = realloc(buffer, buffer_size); // Reallocate memory
+        //             if (new_buffer == NULL) // Check for memory allocation failure
+        //             {
+        //                 fprintf(stderr, "Memory allocation failed\n");
+        //                 free(buffer); // Free the old buffer to prevent memory leak
+        //                 return NULL; // Return NULL to indicate failure
+        //             }
+        //             buffer = new_buffer; // Update the buffer pointer to the new buffer
+        //         }
+
+        //         memmove(buffer + cursor_position + last_deleted_length, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the right (+1 includes null terminator)
+        //         memcpy(buffer + cursor_position, last_deleted, last_deleted_length); // Insert the last deleted text at the cursor position
+        //         length += last_deleted_length; // Update length of input line
+        //         cursor_position += last_deleted_length; // Move cursor position to the right after pasting
+
+        //         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+        //     }
+        // }
     }
 
     // Disable raw mode for terminal input

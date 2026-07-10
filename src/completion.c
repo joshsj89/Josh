@@ -36,7 +36,6 @@ struct winsize ws; // Structure to hold terminal window size
 static int compare_strings(const void *a, const void *b)
 {
     // Reorder "./" to be in front of "../"
-
     if (strcmp((const char *)a, "./") == 0)
         return -1; // "./" should come before any other string
     if (strcmp((const char *)b, "./") == 0)
@@ -60,10 +59,8 @@ static int compare_strings(const void *a, const void *b)
 static int is_command_position(const char *buffer, size_t cursor_position)
 {
     for (size_t i = 0; i < cursor_position; i++)
-    {
         if (buffer[i] == ' ')
             return 0; // Not at the command position
-    }
 
     return 1; // At the command position
 }
@@ -84,10 +81,8 @@ static int is_command_position(const char *buffer, size_t cursor_position)
 static int match_exists(char matches[][256], int match_count, const char *new_match)
 {
     for (int i = 0; i < match_count; i++)
-    {
         if (strcmp(matches[i], new_match) == 0)
             return 1; // Match already exists
-    }
 
     return 0; // Match does not exist
 }
@@ -217,9 +212,7 @@ static int find_filename_matches(const char *prefix, char matches[][256], size_t
         size_t dir_length = last_slash - prefix; // Calculate the length of the directory part
 
         if (dir_length == 0) // If the prefix is just "/", set dir to "/" and file_prefix to empty
-        {
             strcpy(dir, "/");
-        }
         else
         {
             strncpy(dir, prefix, dir_length); // Copy the directory part into dir

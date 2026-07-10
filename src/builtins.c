@@ -98,18 +98,12 @@ int shell_exit(Command *cmd)
 int execute_builtin(Command *cmd)
 {
     if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].full_text == NULL)
-    {
         return 0; // No command entered
-    }
 
     if (strcmp(cmd->argv[0].full_text, "cd") == 0)
-    {
         return shell_cd(cmd);
-    }
     else if (strcmp(cmd->argv[0].full_text, "exit") == 0)
-    {
         return shell_exit(cmd);
-    }
     else if (strcmp(cmd->argv[0].full_text, "history") == 0)
     {
         history_print();
