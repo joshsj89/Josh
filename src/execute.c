@@ -147,28 +147,11 @@ static int split_pipeline(Command *original, Command *left, Command *right, ssiz
     if (pipe_index < 0 || pipe_index >= (ssize_t)original->argc) // Invalid pipe index
         return -1;
 
+    left->argv = &original->argv[0];
     left->argc = pipe_index;
-    left->argv = malloc(left->argc * sizeof(Token));
-    if (left->argv == NULL)
-    {
-        fprintf(stderr, "Memory allocation failed\n");
-        return -1;
-    }
 
-    for (size_t i = 0; i < left->argc; i++)
-        left->argv[i] = original->argv[i];
-
+    right->argv = &original->argv[pipe_index + 1];
     right->argc = original->argc - pipe_index - 1;
-    right->argv = malloc(right->argc * sizeof(Token));
-    if (right->argv == NULL)
-    {
-        fprintf(stderr, "Memory allocation failed\n");
-        free(left->argv);
-        return -1;
-    }
-
-    for (size_t i = 0; i < right->argc; i++)
-        right->argv[i] = original->argv[pipe_index + 1 + i];
 
     return 0;
 }
@@ -276,9 +259,6 @@ static void execute_pipeline(Command *cmd, ssize_t pipe_index)
         close(pipefd[0]);
         close(pipefd[1]);
 
-        free(left.argv);
-        free(right.argv);
-
         return;
     }
     else if (left_pid == 0) // Child process for the left command
@@ -300,9 +280,6 @@ static void execute_pipeline(Command *cmd, ssize_t pipe_index)
         close(pipefd[1]);
 
         waitpid(left_pid, NULL, 0); // Wait for the left child to finish if it was created
-
-        free(left.argv);
-        free(right.argv);
         return;
     }
     else if (right_pid == 0) // Child process for the right command
@@ -323,10 +300,6 @@ static void execute_pipeline(Command *cmd, ssize_t pipe_index)
     int status;
     waitpid(left_pid, &status, 0); // Wait for the left child to finish
     waitpid(right_pid, &status, 0); // Wait for the right child to finish
-
-    // Only need to free the argv arrays since the tokens themselves are managed elsewhere (shallow copies)
-    free(left.argv);
-    free(right.argv);
 }
 
 /*
