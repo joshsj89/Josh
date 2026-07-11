@@ -594,6 +594,47 @@ Command *parse_line(char *line)
     return command;
 }
 
+/*
+ * Function: free_token
+ * ----------------------
+ * Frees the memory allocated for a Token structure and its segments.
+ *
+ * Parameters:
+ *   token - A pointer to the Token structure to be freed.
+ */
+void free_token(Token *token)
+{
+    if (!token)
+        return;
+
+    for (size_t i = 0; i < token->segment_count; i++)
+    {
+        free(token->segments[i].text); // Free the text of each segment
+        token->segments[i].text = NULL;
+    }
+
+    free(token->segments); // Free the segments array
+    token->segments = NULL;
+
+    free(token->full_text); // Free the full text of the token
+    token->full_text = NULL;
+}
+
+/*
+ * Function: free_tokens
+ * ----------------------
+ * Frees the memory allocated for an array of tokens and their segments.
+ *
+ * Parameters:
+ *   tokens - A pointer to the array of tokens to be freed.
+ *   count - The number of tokens in the array.
+ */
+static void free_tokens(Token *tokens, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+        free_token(&tokens[i]); // Free each individual token
+}
+
 /**
  * Function: free_command
  * ----------------------
@@ -610,14 +651,9 @@ void free_command(Command *cmd)
     if (!cmd || !cmd->argv) // Check for NULL pointers
         return; // Nothing to free
 
-    for (size_t i = 0; i < cmd->argc; i++)
-    {
-        for (size_t j = 0; j < cmd->argv[i].segment_count; j++)
-            free(cmd->argv[i].segments[j].text); // Free the text of each segment
-        free(cmd->argv[i].segments); // Free the segments array
-    }
-
-    // Free the array of token pointers
-    free(cmd->argv);
+    free_tokens(cmd->argv, cmd->argc); // Free the tokens and their associated memory
+    free(cmd->argv); // Free the array of token pointers
+    cmd->argv = NULL;
     free(cmd); // Free the Command structure itself
+    cmd = NULL;
 }

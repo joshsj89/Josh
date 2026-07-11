@@ -711,7 +711,6 @@ static bool scan_field(char **input, Token *token)
     while (**input != '\0' && !is_ifs(**input))
         (*input)++;
 
-    free(token->full_text); // Free the old token text to prevent memory leaks
     token->full_text = strndup(start, *input - start); // Set the new token text to the extracted field
 
     return true;
@@ -766,6 +765,8 @@ static void word_split(Token *token, Token **argv, size_t *argc, size_t *capacit
 
     while ((scan_field(&p, &field))) 
         append_token(argv, argc, capacity, &field); // Append the newly created field token to the array of tokens
+
+    free_token(token); // Free the original token to prevent memory leaks
 }
 
 /*
