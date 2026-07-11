@@ -257,15 +257,15 @@ static int expand_command(StringBuilder *sb, const char **input)
 
     if (**input && i < sizeof(command) - 1)
     {
-        int cmd_length = simple_command(*input); // Get the length of the simple command inside $()
+        int cmd_length = command_substitution(*input); // Get the length of the command substitution inside $()
 
-        if (cmd_length == -1) // Check for syntax error in simple command
+        if (cmd_length == -1) // Check for syntax error in command substitution
         {
             sb_destroy(sb);
             return -1; // Return -1 to indicate an error
         }
 
-        memcpy(command + i, *input, cmd_length); // Copy the simple command into the command buffer
+        memcpy(command + i, *input, cmd_length); // Copy the command substitution into the command buffer
         i += cmd_length;
         (*input) += cmd_length;
     }

@@ -169,6 +169,14 @@ static void flush_literal(Token *token, const char *start, const char *end, Quot
         token_add_segment(token, SEG_LITERAL, start, end - start, quote);
 }
 
+/*
+ * Function: token_print
+ * ----------------------
+ * Prints the details of a Token structure.
+ *
+ * Parameters:
+ *   token - A pointer to the Token structure to print.
+ */
 void token_print(const Token *token)
 {
     printf("Token Type: %d\n", token->type);
@@ -177,15 +185,22 @@ void token_print(const Token *token)
         printf("Segment %zu: %s\n", i, token->segments[i].text);
 }
 
-/**
+/*
+ * Function: expression
+ * --------------------
  * Parses a Bash expression, tracks parenthesis depth
  * and verifies syntax correctness.
  *
- * @param input The input Bash expression string.
- * @return The length of the expression if parentheses are balanced, -1 otherwise.
- * @note This function assumes the input string begins at the first character of the expression and does not skip leading whitespace.
- * The length returned is the number of characters processed in the expression. 
- * input + length will point to the character after the expression, which is useful for further processing of the input string.
+ * Parameters:
+ *   input - The input Bash expression string.
+ *
+ * Returns:
+ *   The length of the expression if parentheses are balanced, -1 otherwise.
+ *
+ * Note:
+ *   This function assumes the input string begins at the first character of the expression and does not skip leading whitespace.
+ *   The length returned is the number of characters processed in the expression.
+ *   input + length will point to the character after the expression, which is useful for further processing of the input string.
  */
 int expression(const char *input)
 {
@@ -219,15 +234,26 @@ int expression(const char *input)
     return length;
 }
 
-/**
- * Parses a simple command, handling quotes and escape characters.
+/*
+ * Function: command_substitution
+ * -------------------------------
+ * Parses a command substitution, tracks parenthesis depth
+ * and verifies syntax correctness.
  *
- * @param input The input string for the simple command.
- * @return The length of the simple command if parsed successfully, -1 otherwise.
+ * Parameters:
+ *   input - The input string starting with the command substitution.
+ * 
+ * Returns:
+ *   The length of the command substitution if parentheses are balanced, -1 otherwise.
+ * 
+ * Note:
+ *   This function assumes the input string begins at the first character of the command substitution and does not skip leading whitespace.
+ *   The length returned is the number of characters processed in the command substitution. 
+ *   input + length will point to the character after the command substitution, which is useful for further processing of the input string.
  */
-int simple_command(const char *input)
+int command_substitution(const char *input)
 {
-    int length = 0; // Track the length of the simple command
+    int length = 0; // Track the length of the command substitution
     bool in_single = false; // Track if we are inside single quotes
     bool in_double = false; // Track if we are inside double quotes
 
@@ -256,6 +282,15 @@ int simple_command(const char *input)
                 input += expr_length; // Skip to the end of the expression inside $(())
                 length += expr_length; // Count the characters in the expression
 
+                if (*input != ')' || *(input + 1) != ')') // Ensure we have a closing parentheses
+                {
+                    fprintf(stderr, "Error: Unmatched opening parenthesis in input");
+                    return -1; // Return -1 to indicate an error
+                }
+
+                input += 2; // Move past the closing parentheses
+                length += 2; // Count the closing parentheses
+
                 continue;
             }
             
@@ -264,12 +299,21 @@ int simple_command(const char *input)
                 input += 2; // Move past the '$' and the '(' characters
                 length += 2; // Count the '$' and the '(' characters
                 
-                int cmd_length = simple_command(input); // Get the length of the simple command inside $()
-                if (cmd_length == -1) // Check for syntax error in simple command
+                int cmd_length = command_substitution(input); // Get the length of the command substitution inside $()
+                if (cmd_length == -1) // Check for syntax error in command substitution
                     return -1; // Return -1 to indicate an error
 
-                input += cmd_length; // Skip to the end of the simple command inside $()
-                length += cmd_length; // Count the characters in the simple command
+                input += cmd_length; // Skip to the end of the command substitution inside $()
+                length += cmd_length; // Count the characters in the command substitution
+
+                if (*input != ')') // Ensure we have a closing parenthesis
+                {
+                    fprintf(stderr, "Error: Unmatched opening parenthesis in input");
+                    return -1; // Return -1 to indicate an error
+                }
+
+                input += 1; // Move past the closing parenthesis
+                length += 1; // Count the closing parenthesis
 
                 continue;
             }
@@ -278,7 +322,7 @@ int simple_command(const char *input)
                 break;
         }
 
-        length++; // Increment the length of the simple command
+        length++; // Increment the length of the command substitution
         input++;
     }
 
@@ -294,7 +338,7 @@ int simple_command(const char *input)
         return -1; // Return -1 to indicate an error
     }
 
-    return length; // Return the length of the simple command
+    return length; // Return the length of the command substitution
 }
 
 /*
@@ -420,13 +464,13 @@ static void tokenize_line(char *line, Token *token)
             segment_start = token_end;
             token_end += 2; // Skip past the next two characters (the opening parenthesis)
 
-            int cmd_length = simple_command(token_end); // Get the length of the simple command inside $()
-            if (cmd_length == -1) // Check for syntax error in simple command
+            int cmd_length = command_substitution(token_end); // Get the length of the command substitution inside $()
+            if (cmd_length == -1) // Check for syntax error in command substitution
             {
                 token_start = NULL; // Reset token_start
                 return; // Return to indicate an error   
             }
-            token_end += cmd_length; // Skip past the end of the simple command inside $()
+            token_end += cmd_length; // Skip past the end of the command substitution inside $()
 
             if (*token_end != ')') // Ensure we have a closing parenthesis
             {

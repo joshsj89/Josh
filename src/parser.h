@@ -5,10 +5,12 @@
 
 #define INITIAL_TOKEN_CAPACITY 64 // Initial capacity for the token array
 
-int simple_command(const char *input);
+
+int expression(const char *input);
+int command_substitution(const char *input);
 
 Command *parse_line(char *line);
-int expression(const char *input);
+
 void free_token(Token *token);
 void free_command(Command *cmd);
 
