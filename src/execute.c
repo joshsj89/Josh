@@ -20,6 +20,8 @@
 #include "execute.h"
 #include "tokens.h"
 
+#define MAX_COMMANDS 64 // Maximum number of commands in a pipeline
+
 /*
  * Function: is_redirection
  * -------------------------
@@ -109,54 +111,6 @@ static int apply_redirections(Command *cmd)
 }
 
 /*
- * Function: find_pipe
- * --------------------
- * Finds the index of the pipe token in a command.
- *
- * Parameters:
- *   cmd - A pointer to the Command structure containing the command and its arguments
- *
- * Returns:
- *   The index of the pipe token if found, -1 otherwise
- */
-static ssize_t find_pipe(Command *cmd)
-{
-    for (size_t i = 0; i < cmd->argc; i++)
-        if (cmd->argv[i].type == TOKEN_PIPE)
-            return i;
-
-    return -1; // No pipe found
-}
-
-/*
- * Function: split_pipeline
- * -------------------------
- * Splits a command into two commands at the specified pipe index.
- *
- * Parameters:
- *   original - A pointer to the original Command structure containing the command and its arguments
- *   left - A pointer to the Command structure that will hold the left side of the pipe
- *   right - A pointer to the Command structure that will hold the right side of the pipe
- *   pipe_index - The index of the pipe token in the original command
- *
- * Returns:
- *   0 if successful, -1 if an error occurs (e.g., invalid pipe index)
- */
-static int split_pipeline(Command *original, Command *left, Command *right, ssize_t pipe_index)
-{
-    if (pipe_index < 0 || pipe_index >= (ssize_t)original->argc) // Invalid pipe index
-        return -1;
-
-    left->argv = &original->argv[0];
-    left->argc = pipe_index;
-
-    right->argv = &original->argv[pipe_index + 1];
-    right->argc = original->argc - pipe_index - 1;
-
-    return 0;
-}
-
-/*
  * Function: command_to_argv
  * --------------------------
  * Converts a Command structure to an array of strings suitable for execvp.
@@ -228,78 +182,114 @@ static void execute_child(Command *cmd)
 }
 
 /*
- * Function: execute_pipeline
- * --------------------------
- * Executes a pipeline of commands with the given pipe index.
+ * Function: split_commands
+ * ------------------------
+ * Splits a command into multiple commands based on pipes.
  *
  * Parameters:
- *   cmd - A pointer to the Command structure containing the pipeline
- *   pipe_index - The index of the pipe in the command array
+ *   input - A pointer to the input Command structure
+ *   commands - A pointer to an array of Command structures
+ *
+ * Returns:
+ *   The number of commands split.
  */
-static void execute_pipeline(Command *cmd, ssize_t pipe_index)
+size_t split_commands(Command *input, Command *commands)
 {
-    Command left, right;
-    if (split_pipeline(cmd, &left, &right, pipe_index) == -1)
+    size_t start = 0;
+    size_t count = 0;
+
+    for (size_t i = 0; i < input->argc; i++)
     {
-        fprintf(stderr, "Invalid pipe index\n");
-        return; // Return if splitting the pipeline fails
+        Token *token = &input->argv[i];
+
+        if (token->type == TOKEN_PIPE)
+        {
+            commands[count].argv = &input->argv[start];
+            commands[count].argc = i - start;
+            count++;
+            start = i + 1; // Move start to the next token after the pipe
+        }
     }
 
-    int pipefd[2]; // index 0 for reading, index 1 for writing
-    if (pipe(pipefd) == -1)
+    // Handle the last command after the last pipe (or if there are no pipes)
+    if (start < input->argc)
     {
-        perror("pipe");
-        return;
+        commands[count].argv = &input->argv[start];
+        commands[count].argc = input->argc - start;
+        count++;
     }
 
-    pid_t left_pid = fork(); // Fork the left command
-    if (left_pid < 0) // if fork fails
+    return count;
+}
+
+/*
+ * Function: execute_pipeline
+ * --------------------------
+ * Executes a series of commands connected by pipes.
+ * 
+ * Parameters:
+ *   cmds - A pointer to an array of Command structures representing the commands in the pipeline
+ *   num_cmds - The number of commands in the pipeline
+ * 
+ * Note:
+ *   This function creates a new process for each command in the pipeline, sets up the necessary
+ *   pipes for inter-process communication, and waits for all child processes to finish.
+ * 
+ */
+static void execute_pipeline(Command *cmds, size_t num_cmds)
+{
+    int in_fd = 0; // Start with standard input
+    int fd[2];
+
+    for (size_t i = 0; i < num_cmds; i++)
     {
-        perror("fork");
-        close(pipefd[0]);
-        close(pipefd[1]);
+        if (i < num_cmds - 1) // If not the last command, create a pipe
+        {
+            if (pipe(fd) == -1)
+            {
+                perror("pipe");
+                exit(EXIT_FAILURE);
+            }
+        }
 
-        return;
+        pid_t pid = fork();
+        if (pid < 0)
+        {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0) // Child process
+        {
+            if (in_fd != 0) // If not the first command, redirect input
+            {
+                dup2(in_fd, STDIN_FILENO);
+                close(in_fd);
+            }
+
+            if (i < num_cmds - 1) // If not the last command, redirect output to the pipe
+            {
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[0]);
+                close(fd[1]);
+            }
+
+            execute_child(&cmds[i]); // Execute the command in the child process
+        }
+        else // Parent process
+        {
+            if (in_fd != 0)
+                close(in_fd); // Close the previous read end
+
+            if (i < num_cmds - 1)
+                close(fd[1]); // Close the write end of the pipe in the parent
+
+            in_fd = fd[0]; // Save the read end for the next command
+        }
     }
-    else if (left_pid == 0) // Child process for the left command
-    {
-        close(pipefd[0]); // Close the read end of the pipe in the left child
-        dup2(pipefd[1], STDOUT_FILENO); // Redirect stdout to the write end of the pipe
-        close(pipefd[1]); // Close the write end after duplicating
 
-        execute_child(&left); // Execute the left command
-
-        exit(EXIT_FAILURE); // Will only reach here if execvp fails
-    }
-
-    pid_t right_pid = fork(); // Fork the right command
-    if (right_pid < 0) // if fork fails
-    {
-        perror("fork");
-        close(pipefd[0]);
-        close(pipefd[1]);
-
-        waitpid(left_pid, NULL, 0); // Wait for the left child to finish if it was created
-        return;
-    }
-    else if (right_pid == 0) // Child process for the right command
-    {
-        close(pipefd[1]); // Close the write end of the pipe in the right child
-        dup2(pipefd[0], STDIN_FILENO); // Redirect stdin to the read end of the pipe
-        close(pipefd[0]); // Close the read end after duplicating
-
-        execute_child(&right); // Execute the right command
-
-        exit(EXIT_FAILURE); // Will only reach here if execvp fails
-    }
-
-    // Close both ends of the pipe in the parent process
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    int status;
-    waitpid(left_pid, &status, 0); // Wait for the left child to finish
-    waitpid(right_pid, &status, 0); // Wait for the right child to finish
+    // Wait for all child processes to finish
+    for (size_t i = 0; i < num_cmds; i++)
+        wait(NULL);
 }
 
 /*
@@ -323,10 +313,11 @@ void execute_command(Command *cmd)
     if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].full_text == NULL)
         return; // No command entered, return without doing anything
 
-    ssize_t pipe_index = find_pipe(cmd); // Check if there is a pipe in the command
-    if (pipe_index != -1)
+    Command commands[MAX_COMMANDS]; // Array to hold split commands for pipelines
+    size_t num_commands = split_commands(cmd, commands); // Count the number of commands in the pipeline
+    if (num_commands > 1) // If there are multiple commands, execute as a pipeline
     {
-        execute_pipeline(cmd, pipe_index); // Execute the command as a pipeline if a pipe is found
+        execute_pipeline(commands, num_commands);
         return;
     }
 
