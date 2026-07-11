@@ -188,23 +188,18 @@ static int find_command_matches(const char *prefix, char matches[][256], size_t 
 }
 
 /*
- * Function: find_filename_matches
- * -------------------------------
- * Finds all filenames in the current directory that match the given prefix.
+ * Function: split_prefix
+ * ----------------------
+ * Splits a prefix into a directory part and a file prefix.
  *
  * Parameters:
- *   prefix - The prefix to match filenames against.
- *   matches - An array to store the matching filenames.
+ *   prefix - The prefix to split.
+ *   dir - An array to store the directory part.
+ *   file_prefix - An array to store the file prefix.
  *   word_length - A pointer to store the length of the word being completed.
- *
- * Returns:
- *   The number of matching filenames found.
  */
-static int find_filename_matches(const char *prefix, char matches[][256], size_t *word_length)
+static void split_prefix(const char *prefix, char *dir, char *file_prefix, size_t *word_length)
 {
-    char dir[PATH_MAX];
-    char file_prefix[NAME_MAX];
-
     const char *last_slash = strrchr(prefix, '/'); // Find the last occurrence of '/' in the prefix
     
     if (last_slash)
@@ -228,6 +223,27 @@ static int find_filename_matches(const char *prefix, char matches[][256], size_t
         strcpy(file_prefix, prefix);
         *word_length = strlen(file_prefix); // Store the length of the file prefix
     }
+}
+
+/*
+ * Function: find_filename_matches
+ * -------------------------------
+ * Finds all filenames in the current directory that match the given prefix.
+ *
+ * Parameters:
+ *   prefix - The prefix to match filenames against.
+ *   matches - An array to store the matching filenames.
+ *   word_length - A pointer to store the length of the word being completed.
+ *
+ * Returns:
+ *   The number of matching filenames found.
+ */
+static int find_filename_matches(const char *prefix, char matches[][256], size_t *word_length)
+{
+    char dir[PATH_MAX];
+    char file_prefix[NAME_MAX];
+
+    split_prefix(prefix, dir, file_prefix, word_length); // Split the prefix into directory and file prefix
 
     DIR *dp = opendir(dir); // Open the current directory
 
@@ -253,6 +269,64 @@ static int find_filename_matches(const char *prefix, char matches[][256], size_t
 
             if (entry->d_type == DT_DIR) // Check if the entry is a directory
                 strncat(file_name, "/", sizeof(file_name) - strlen(file_name) - 1); // Append '/' to directory names
+
+            add_match(matches, &match_count, file_name); // Add the matching filename to the output buffer
+        }
+    }
+
+    closedir(dp); // Close the directory stream
+
+    qsort(matches, match_count, sizeof(matches[0]), compare_strings); // Sort the matches alphabetically
+
+    return match_count; // Return the number of matching filenames found
+}
+
+/*
+ * Function: find_executable_matches
+ * ---------------------------------
+ * Finds all executable files in the specified directory that match the given prefix.
+ *
+ * Parameters:
+ *   prefix       - The prefix to match against filenames.
+ *   matches      - An array to store the matching filenames.
+ *   word_length  - A pointer to store the length of the file prefix.
+ *
+ * Returns:
+ *   The number of matching filenames found.
+ */
+static int find_executable_matches(const char *prefix, char matches[][256], size_t *word_length)
+{
+    char dir[PATH_MAX];
+    char file_prefix[NAME_MAX];
+
+    split_prefix(prefix, dir, file_prefix, word_length); // Split the prefix into directory and file prefix
+
+    DIR *dp = opendir(dir); // Open the current directory
+
+    if (dp == NULL)
+        return 0; // Unable to open directory
+
+    int match_count = 0; // Count of matching filenames found
+    struct dirent *entry;
+
+    while ((entry = readdir(dp)) != NULL) // Read each entry in the directory
+    {
+        int want_hidden = (file_prefix[0] == '.'); // Determine if hidden files should be included based on the prefix
+
+        if (!want_hidden) // Skip '.' and '..' entries if not looking for hidden files
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                continue;
+
+        if (strncmp(entry->d_name, file_prefix, strlen(file_prefix)) == 0) // Check if the entry matches the prefix
+        {
+            char file_name[256];
+            strncpy(file_name, entry->d_name, sizeof(file_name) - 1);
+            file_name[sizeof(file_name) - 1] = '\0';
+
+            if (entry->d_type == DT_DIR) // Check if the entry is a directory
+                strncat(file_name, "/", sizeof(file_name) - strlen(file_name) - 1); // Append '/' to directory names
+            else if (access(file_name, X_OK) != 0) // Check if the entry is executable
+                continue; // Skip non-executable files
 
             add_match(matches, &match_count, file_name); // Add the matching filename to the output buffer
         }
@@ -436,14 +510,25 @@ static void complete_matches(char *buffer, size_t *length, size_t *cursor_positi
     }
 }
 
-char *complete_line(const char *buffer, size_t cursor_position)
+/*
+ * Function: complete_line
+ * -----------------------
+ * Completes the current line based on the cursor position and returns the completed word.
+ *
+ * Parameters:
+ *   buffer - The input buffer containing the line of text.
+ *   cursor_position - The position of the cursor in the buffer.
+ *
+ * Returns:
+ *   A pointer to the completed word, or NULL if no completion is possible.
+ */
+static char *complete_line(const char *buffer, size_t cursor_position)
 {
     static char word[256];
     size_t word_length;
 
     get_current_word(buffer, cursor_position, word, &word_length);
 
-    // Placeholder for actual completion logic
     return word;
 }
 
@@ -459,8 +544,15 @@ char *complete_line(const char *buffer, size_t cursor_position)
  */
 void tab_complete(char *buffer, size_t *length, size_t *cursor_position)
 {
+    char *current_word = complete_line(buffer, *cursor_position); // Get the current word based on cursor position
+
     if (is_command_position(buffer, *cursor_position))
-        complete_matches(buffer, length, cursor_position, find_command_matches);
+    {
+        if (strchr(current_word, '/') != NULL) // If the current word contains a '/', look for executables
+            complete_matches(buffer, length, cursor_position, find_executable_matches);
+        else // Otherwise, treat it as a command
+            complete_matches(buffer, length, cursor_position, find_command_matches);
+    }
     else
         complete_matches(buffer, length, cursor_position, find_filename_matches);
 }
