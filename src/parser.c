@@ -253,6 +253,7 @@ int expression(const char *input)
  */
 int command_substitution(const char *input)
 {
+    int depth = 0; // Track the depth of nested parentheses
     int length = 0; // Track the length of the command substitution
     bool in_single = false; // Track if we are inside single quotes
     bool in_double = false; // Track if we are inside double quotes
@@ -290,8 +291,6 @@ int command_substitution(const char *input)
 
                 input += 2; // Move past the closing parentheses
                 length += 2; // Count the closing parentheses
-
-                continue;
             }
             
             if (*input == '$' && *(input + 1) == '(')
@@ -314,12 +313,25 @@ int command_substitution(const char *input)
 
                 input += 1; // Move past the closing parenthesis
                 length += 1; // Count the closing parenthesis
-
-                continue;
             }
-            
-            if (*input == ')')
+
+            if (depth == 0 && *input == ')') // If we are at the top level and encounter a closing parenthesis, stop
                 break;
+            
+            if (*input == '(')
+                depth++;
+            else if (*input == ')')
+            {
+                depth--;
+
+                // If depth goes below 0, we have a closing parenthesis
+                // before an opening one (syntax error)
+                if (depth < 0)
+                {
+                    fprintf(stderr, "Syntax Error: Unbalanced closing parenthesis");
+                    return -1; // Return -1 to indicate an error
+                }
+            }
         }
 
         length++; // Increment the length of the command substitution

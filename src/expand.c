@@ -5,7 +5,7 @@
  * 
  * TODO:
  *  - Implement support for shell variables and special variables (e.g., $?, $!, etc.).
- *  - Build a custom parser for arithmetic expansion (e.g., $((expression))) rather than delegating to Bash.
+ *  - Build a custom parser for command substitution and arithmetic expansion (e.g., $((expression))) rather than delegating to Bash.
  *  - Implement support for Bash string manipulation (e.g., ${VAR#pattern}, ${VAR%pattern}, etc.).
  *  - Implement support for escaping the '$' character (e.g., \$VAR should not expand).
  *  - Implement support for expanding variables in double-quoted strings while preserving spaces.
