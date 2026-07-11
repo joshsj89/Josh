@@ -303,26 +303,32 @@ static void execute_pipeline(Command *cmds, size_t num_cmds)
  * Parameters:
  *   cmd - A pointer to the Command structure containing the command and its arguments
  * 
+ * Returns:
+ *  0 if the command was executed successfully, -1 if the shell should exit.
+ * 
  * Note:
  *  The caller is responsible for ensuring that the args array is properly allocated and terminated with a NULL pointer
  *  as the parsing should have already handled this.
  */
-void execute_command(Command *cmd)
+int execute_command(Command *cmd)
 {
     // Check if there is a command to execute
     if (cmd == NULL || cmd->argv == NULL || cmd->argc == 0 || cmd->argv[0].full_text == NULL)
-        return; // No command entered, return without doing anything
+        return 0; // No command entered, return without doing anything
 
     Command commands[MAX_COMMANDS]; // Array to hold split commands for pipelines
     size_t num_commands = split_commands(cmd, commands); // Count the number of commands in the pipeline
     if (num_commands > 1) // If there are multiple commands, execute as a pipeline
     {
         execute_pipeline(commands, num_commands);
-        return;
+        return 0;
     }
 
-    if (execute_builtin(cmd)) // Check if the command is a built-in command
-        return; // Built-in command executed, return without creating a child process
+    int builtin_status = execute_builtin(cmd); // Check if the command is a built-in command
+    if (builtin_status == -1)
+        return -1; // exit the shell
+    else if (builtin_status == 1)
+        return 0;
 
     // Create a child process to execute the command
     pid_t pid = fork();
@@ -341,4 +347,6 @@ void execute_command(Command *cmd)
         int status;
         waitpid(pid, &status, 0);
     }
+
+    return 0;
 }

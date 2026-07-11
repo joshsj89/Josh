@@ -3,6 +3,6 @@
 
 #include "tokens.h"
 
-void execute_command(Command *cmd);
+int execute_command(Command *cmd);
 
 #endif /* EXECUTE_H */

@@ -320,8 +320,7 @@ char *line_editor_read(void)
         {
             if (length == 0) // If the input line is empty, treat it as EOF
             {
-                free(buffer); // Free the allocated buffer
-                buffer = "exit";
+                strcpy(buffer, "exit"); // Set buffer to "exit" to signal shell exit
                 break;
             }
             else // If the input line is not empty, forward delete

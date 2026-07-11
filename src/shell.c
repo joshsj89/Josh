@@ -66,7 +66,8 @@ void shell_loop(void)
     printf("Type 'exit' or press Ctrl+D to exit the shell.\n");
     printf("------------------------------------------------\n");
 
-    while (1)
+    int running = 1; // Flag to control the shell loop
+    while (running)
     {
         print_prompt();
 
@@ -84,7 +85,10 @@ void shell_loop(void)
 
         expand_variables(cmd); // Expand any variables in the command
 
-        execute_command(cmd); // Execute the parsed command
+        int status = execute_command(cmd); // Execute the parsed command
+
+        if (status == -1)
+            running = 0;
 
         free_command(cmd); // Free the memory allocated for the command
         free(line); // Free the memory allocated by line_editor_read

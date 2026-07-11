@@ -73,13 +73,12 @@ int shell_cd(Command *cmd)
  *   cmd - A pointer to the Command structure containing the command and its arguments
  *
  * Returns:
- *   This function does not return as it exits the shell.
+ *   -1 to indicate that the shell should exit
  */
 int shell_exit(Command *cmd)
 {
     (void)cmd; // Unused parameter
-    history_destroy(); // Clean up history before exiting
-    exit(EXIT_SUCCESS); // Exit the shell with status code 0
+    return -1; // Return -1 to indicate that the shell should exit
 }
 
 /*
