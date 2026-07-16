@@ -28,22 +28,6 @@ const char *banner = "\n"
     " \x1b[34m ▒▒▒▒▒▒▒▒    ▒▒▒▒▒▒  ▒▒▒▒▒▒  ▒▒▒▒ ▒▒▒▒▒ \x1b[0m\n"
     "                                        ";
 
-/* 
- * Function: print_prompt
- * ----------------------
- * Prints the shell prompt to the standard output.
- *
- * This function displays the prompt to indicate that the shell is ready to accept user input.
- * It also flushes the output buffer to ensure that the prompt is displayed immediately.
- *
- */
-static void print_prompt(void)
-{
-    fputs(get_prompt(), stdout);
-    
-    fflush(stdout); // Ensure the prompt is displayed immediately
-}
-
 /*
  * Function: shell_loop
  * --------------------
@@ -69,8 +53,6 @@ void shell_loop(void)
     int running = 1; // Flag to control the shell loop
     while (running)
     {
-        print_prompt();
-
         char *line = line_editor_read();
 
         if (line == NULL) // Exit the loop on EOF or error

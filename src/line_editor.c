@@ -80,6 +80,50 @@ static inline int ctrl_key(int k)
 }
 
 /*
+ * Function: get_cursor_position
+ * ----------------------------------
+ * Checks if the cursor is at the first column of the terminal.
+ * 
+ * Parameters:
+ *  row - Pointer to store the current row of the cursor.
+ *  col - Pointer to store the current column of the cursor.
+ *
+ * Returns:
+ *   0 if successful, -1 otherwise.
+ * 
+ * Note:
+ *   This function sends an ANSI escape sequence to the terminal to query the cursor position.
+ *   Therefore, it must be called in a context where the terminal is in raw mode and can respond to the query.
+ */
+int get_cursor_position(size_t *row, size_t *col)
+{
+    char buf[32];
+    size_t i = 0;
+
+    write(STDOUT_FILENO, "\033[6n", 4); // Request cursor position report
+
+    while (i < sizeof(buf) - 1) // Read the response from the terminal
+    {
+        if (read(STDIN_FILENO, &buf[i], 1) != 1)
+            return -1; // Return -1 on read error
+        if (buf[i] == 'R')
+            break;
+        i++;
+    }
+
+    buf[i + 1] = '\0';
+
+    unsigned int row_temp, col_temp;
+    if (sscanf(buf, "\033[%u;%uR", &row_temp, &col_temp) != 2)
+        return -1;
+
+    *row = row_temp;
+    *col = col_temp;
+
+    return 0;
+}
+
+/*
  * Function: redraw_line
  * ---------------------
  * Redraws the current input line with the updated buffer and cursor position.
@@ -88,25 +132,26 @@ static inline int ctrl_key(int k)
  * and moves the cursor to the correct position based on the cursor_position parameter.
  *
  * Parameters:
- *   buffer          - The input buffer containing the characters.
- *   length          - The current length of the input line.
- *   cursor_position - The current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  */
-void redraw_line(const char *buffer, size_t length, size_t cursor_position)
+void redraw_line(LineEditor *ed)
 {
     // Clear the current line
     printf("\r"); // Move cursor back to the beginning of the line
-    printf("\033[2K"); // ANSI escape code to clear the entire line
+    if (ed->prompt_start_col > 1)
+        printf("\033[%zuC", ed->prompt_start_col - 1); // Move cursor to the prompt's start column
+
+    printf("\033[K"); // ANSI escape code to clear from cursor to the end of the line
 
     // Print the prompt
-    fputs(get_prompt(), stdout);
+    fputs(ed->prompt, stdout);
 
     // Print the buffer content
-    fwrite(buffer, 1, length, stdout);
+    fwrite(ed->buffer, 1, ed->length, stdout);
 
     // Move the cursor to the correct position
-    for (size_t i = length; i > cursor_position; i--)
-        printf("\b"); // Move cursor left to the desired position
+    for (size_t i = ed->length; i > ed->cursor_position; i--)
+        fputs(left_arrow, stdout); // Move cursor left to the desired position
 
     fflush(stdout); // Flush the output buffer to ensure immediate display
 }
@@ -120,22 +165,20 @@ void redraw_line(const char *buffer, size_t length, size_t cursor_position)
  * and updates the input buffer accordingly. It also manages the cursor position and length of the input line.
  *
  * Parameters:
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  *   next_command - The command to display (previous or next command from history).
- *   length       - Pointer to the current length of the input line.
- *   cursor_position - Pointer to the current cursor position in the input line.
- *   buffer       - The input buffer to update with the command.
- *   buffer_size  - The size of the input buffer.
+ *
  */
-static void handle_up_down(const char *next_command, size_t *length, size_t *cursor_position, char *buffer, size_t buffer_size)
+static void handle_up_down(LineEditor *ed, const char *next_command)
 {
     if (next_command != NULL) // Check if there is a previous/next command
     {
         // Copy the previous/next command into the buffer
-        snprintf(buffer, buffer_size, "%s", next_command); // Copy the previous/next command into the buffer
-        *length = strlen(buffer); // Update the length of the input line
-        *cursor_position = *length; // Move the cursor to the end of the line
+        snprintf(ed->buffer, ed->buffer_size, "%s", next_command); // Copy the previous/next command into the buffer
+        ed->length = strlen(ed->buffer); // Update the length of the input line
+        ed->cursor_position = ed->length; // Move the cursor to the end of the line
 
-        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        redraw_line(ed); // Redraw the line with the updated buffer and cursor position
     }
 }
 
@@ -147,15 +190,15 @@ static void handle_up_down(const char *next_command, size_t *length, size_t *cur
  * This function checks if the cursor is not at the beginning of the line and moves it left if possible.
  *
  * Parameters:
- *   cursor_position - Pointer to the current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  */
-static void move_cursor_left(size_t *cursor_position)
+static void move_cursor_left(LineEditor *ed)
 {
-    if (*cursor_position > 0) // Ensure the cursor is not at the beginning
+    if (ed->cursor_position > 0) // Ensure the cursor is not at the beginning
     {
         printf("%s", left_arrow); // Move cursor left
         fflush(stdout); // Flush the output buffer to ensure immediate display
-        (*cursor_position)--; // Decrease the cursor position
+        ed->cursor_position--; // Decrease the cursor position
     }
 }
 
@@ -167,17 +210,17 @@ static void move_cursor_left(size_t *cursor_position)
  * This function checks if the cursor is not at the end of the line and moves it right if possible.
  *
  * Parameters:
- *   cursor_position - Pointer to the current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  *   length          - The current length of the input line.
- *   buffer          - The input buffer containing the characters.
+ *
  */
-static void move_cursor_right(size_t *cursor_position, size_t length)
+static void move_cursor_right(LineEditor *ed, size_t length)
 {
-    if (*cursor_position < length) // Ensure the cursor is not at the end
+    if (ed->cursor_position < length) // Ensure the cursor is not at the end
     {
         printf("%s", right_arrow); // Move cursor right
         fflush(stdout); // Flush the output buffer to ensure immediate display
-        (*cursor_position)++; // Increase the cursor position
+        ed->cursor_position++; // Increase the cursor position
     }
 }
 
@@ -189,19 +232,17 @@ static void move_cursor_right(size_t *cursor_position, size_t length)
  * This function checks if the cursor is not at the beginning of the line and deletes the character before it if possible.
  *
  * Parameters:
- *   buffer          - The input buffer containing the characters.
- *   length          - Pointer to the current length of the input line.
- *   cursor_position - Pointer to the current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  */
-static void delete_backward(char *buffer, size_t *length, size_t *cursor_position)
+static void delete_backward(LineEditor *ed)
 {
-    if (*cursor_position > 0) // Ensure the cursor is not at the beginning of the line
+    if (ed->cursor_position > 0) // Ensure the cursor is not at the beginning of the line
     {
-        memmove(buffer + *cursor_position - 1, buffer + *cursor_position, *length - *cursor_position + 1); // Shift characters after cursor to the left (+1 includes the null terminator)
-        (*cursor_position)--; // Move the cursor position to the left
-        (*length)--; // Decrease the length of the input line
+        memmove(ed->buffer + ed->cursor_position - 1, ed->buffer + ed->cursor_position, ed->length - ed->cursor_position + 1); // Shift characters after cursor to the left (+1 includes the null terminator)
+        ed->cursor_position--; // Move the cursor position to the left
+        ed->length--; // Decrease the length of the input line
 
-        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        redraw_line(ed); // Redraw the line with the updated buffer and cursor position
         completion_reset(); // Reset the completion state
     }
 }
@@ -214,18 +255,16 @@ static void delete_backward(char *buffer, size_t *length, size_t *cursor_positio
  * This function checks if the cursor is not at the end of the line and deletes the character after it if possible.
  *
  * Parameters:
- *   buffer          - The input buffer containing the characters.
- *   length          - Pointer to the current length of the input line.
- *   cursor_position - Pointer to the current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  */
-static void delete_forward(char *buffer, size_t *length, size_t *cursor_position)
+static void delete_forward(LineEditor *ed)
 {
-    if (*cursor_position < *length) // Ensure the cursor is not at the end of the line
+    if (ed->cursor_position < ed->length) // Ensure the cursor is not at the end of the line
     {
-        memmove(buffer + *cursor_position, buffer + *cursor_position + 1, *length - *cursor_position); // Shift characters after cursor to the left
-        (*length)--; // Decrease the length of the input line
+        memmove(ed->buffer + ed->cursor_position, ed->buffer + ed->cursor_position + 1, ed->length - ed->cursor_position); // Shift characters after cursor to the left
+        ed->length--; // Decrease the length of the input line
 
-        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        redraw_line(ed); // Redraw the line with the updated buffer and cursor position
         completion_reset(); // Reset the completion state
     }
 }
@@ -239,35 +278,32 @@ static void delete_forward(char *buffer, size_t *length, size_t *cursor_position
  * inserts the new character, and updates the cursor position and length of the input line.
  *
  * Parameters:
- *   buffer          - The input buffer containing the characters.
- *   length          - Pointer to the current length of the input line.
- *   cursor_position - Pointer to the current cursor position in the input line.
- *   buffer_size     - Pointer to the size of the input buffer.
- *   c               - The character to insert at the cursor position.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
+ *   c - The character to insert at the cursor position.
  */
-static void insert_character(char *buffer, size_t *length, size_t *cursor_position, size_t *buffer_size, unsigned char c)
+static void insert_character(LineEditor *ed, unsigned char c)
 {
-    if (*length + 1 >= *buffer_size) // Check if buffer needs to be resized
+    if (ed->length + 1 >= ed->buffer_size) // Check if buffer needs to be resized
     {
-        *buffer_size *= 2; // Double the buffer size
-        char *new_buffer = realloc(buffer, *buffer_size); // Reallocate memory for the new buffer size
+        ed->buffer_size *= 2; // Double the buffer size
+        char *new_buffer = realloc(ed->buffer, ed->buffer_size); // Reallocate memory for the new buffer size
         if (new_buffer == NULL) // Check for memory allocation failure
         {
             fprintf(stderr, "Memory allocation failed\n");
-            free(buffer); // Free the old buffer to prevent memory leak
+            free(ed->buffer); // Free the old buffer to prevent memory leak
             return; // Return to indicate failure
         }
-        buffer = new_buffer; // Update the buffer pointer to the new buffer
+        ed->buffer = new_buffer; // Update the buffer pointer to the new buffer
     }
 
-    memmove(buffer + *cursor_position + 1, buffer + *cursor_position, *length - *cursor_position); // Shift characters after cursor to the right
-    buffer[*cursor_position] = c; // Insert the new character at the cursor position
-    (*cursor_position)++;          // Move the cursor position to the right
-    (*length)++;                   // Increase the length of the input line
+    memmove(ed->buffer + ed->cursor_position + 1, ed->buffer + ed->cursor_position, ed->length - ed->cursor_position); // Shift characters after cursor to the right
+    ed->buffer[ed->cursor_position] = c; // Insert the new character at the cursor position
+    ed->cursor_position++;          // Move the cursor position to the right
+    ed->length++;                   // Increase the length of the input line
 
-    buffer[*length] = '\0'; // Null-terminate the string
+    ed->buffer[ed->length] = '\0'; // Null-terminate the string
 
-    redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+    redraw_line(ed); // Redraw the line with the updated buffer and cursor position
     completion_reset(); // Reset the completion state
 }
 
@@ -285,57 +321,75 @@ static void insert_character(char *buffer, size_t *length, size_t *cursor_positi
  */
 char *line_editor_read(void)
 {
+    LineEditor ed = {0};
+
     // Allocate a buffer to hold the input line
-    size_t buffer_size = 1024; // Initial buffer size
-    char *buffer = malloc(buffer_size);
-    if (buffer == NULL) // Check for memory allocation failure
+    ed.buffer_size = 1024; // Initial buffer size
+    ed.buffer = malloc(ed.buffer_size);
+    if (ed.buffer == NULL) // Check for memory allocation failure
     {
         fprintf(stderr, "Memory allocation failed\n");
         return NULL; // Return NULL to indicate failure
     }
 
+    ed.prompt = get_prompt(); // Get the current prompt string
+
     // Enable raw mode for terminal input
     enable_raw_mode();
 
+    size_t row, col;
+    if (get_cursor_position(&row, &col) == -1) // Get the current cursor position
+    {
+        fprintf(stderr, "Failed to get cursor position\n");
+        free(ed.buffer); // Free the allocated buffer to prevent memory leak
+        disable_raw_mode(); // Disable raw mode before returning
+        return NULL; // Return NULL to indicate failure
+    }
+
+    ed.prompt_start_col = col; // Track where the prompt begins
+
+    fputs(ed.prompt, stdout);
+    fflush(stdout);
+
     // Read characters from standard input
-    size_t length = 0; // Current length of the input line
-    size_t cursor_position = 0; // Current cursor position in the input line
+    ed.length = 0; // Current length of the input line
+    ed.cursor_position = 0; // Current cursor position in the input line
     unsigned char c; // Variable to hold the character read from input
     while (read(STDIN_FILENO, &c, 1) == 1) // Read one character at a time
     {
         if (c == '\n') // Check for newline character (Enter key)
         {
-            buffer[length] = '\0'; // Null-terminate the string
+            ed.buffer[ed.length] = '\0'; // Null-terminate the string
             break;                 // Exit the loop
         }
         else if (c == 127 || c == 8 || c == ctrl_key('h')) // Check for delete or backspace character
         {
-            delete_backward(buffer, &length, &cursor_position);
+            delete_backward(&ed);
         }
         else if (c >= 32 && c <= 126) // Check for printable characters
         {
-            insert_character(buffer, &length, &cursor_position, &buffer_size, c); // Insert the character into the buffer
+            insert_character(&ed, c); // Insert the character into the buffer
         }
         else if (c == ctrl_key('d')) // Check for Ctrl+D (EOF)
         {
-            if (length == 0) // If the input line is empty, treat it as EOF
+            if (ed.length == 0) // If the input line is empty, treat it as EOF
             {
-                strcpy(buffer, "exit"); // Set buffer to "exit" to signal shell exit
+                strcpy(ed.buffer, "exit"); // Set buffer to "exit" to signal shell exit
                 break;
             }
             else // If the input line is not empty, forward delete
             {
-                delete_forward(buffer, &length, &cursor_position); // Delete the character at the cursor position
+                delete_forward(&ed); // Delete the character at the cursor position
             }
         }
         else if (c == ctrl_key('c')) // Check for Ctrl+C (SIGINT)
         {
-            free(buffer); // Free the allocated buffer
+            free(ed.buffer); // Free the allocated buffer
             return NULL; // Return NULL to indicate that the input was interrupted
         }
         else if (c == '\t') // Check for tab character (tab completion) and Ctrl+I
         {
-            tab_complete(buffer, &length, &cursor_position); // Handle tab completion
+            tab_complete(&ed); // Handle tab completion
         }
         else if (c == 27) // Check for escape character (start of escape sequence)
         {
@@ -350,37 +404,37 @@ char *line_editor_read(void)
                 {
                     case 'A': // Up arrow key
                         const char *prev_command = history_previous(); // Get the previous command from history
-                        handle_up_down(prev_command, &length, &cursor_position, buffer, buffer_size); // Handle the previous command
+                        handle_up_down(&ed, prev_command); // Handle the previous command
                         completion_reset(); // Reset the completion state
                         break;
                     case 'B': // Down arrow key
                         const char *next_command = history_next(); // Get the next command from history
-                        handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
+                        handle_up_down(&ed, next_command); // Handle the next command
                         completion_reset(); // Reset the completion state
                         break;
                     case 'C': // Right arrow key
-                        move_cursor_right(&cursor_position, length); // Move the cursor right
+                        move_cursor_right(&ed, ed.length); // Move the cursor right
                         completion_reset(); // Reset the completion state
                         break;
                     case 'D': // Left arrow key
-                        move_cursor_left(&cursor_position); // Move the cursor left
+                        move_cursor_left(&ed); // Move the cursor left
                         completion_reset(); // Reset the completion state
                         break;
                     case 'F': // End key
-                        cursor_position = length; // Move cursor to the end of the line
-                        redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        ed.cursor_position = ed.length; // Move cursor to the end of the line
+                        redraw_line(&ed); // Redraw the line with the updated cursor position
                         completion_reset(); // Reset the completion state
                         break;
                     case 'H': // Home key
-                        cursor_position = 0; // Move cursor to the beginning of the line
-                        redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+                        ed.cursor_position = 0; // Move cursor to the beginning of the line
+                        redraw_line(&ed); // Redraw the line with the updated cursor position
                         completion_reset(); // Reset the completion state
                         break;
                     case '3': // Delete key (ESC [ 3 ~)
                         unsigned char tilde;
                         if (read(STDIN_FILENO, &tilde, 1) != 1) break; // Read the next character
                         if (tilde == '~') // Check for the tilde character
-                            delete_forward(buffer, &length, &cursor_position); // Delete the character at the cursor position
+                            delete_forward(&ed); // Delete the character at the cursor position
                         break;
                     default:
                         break;
@@ -389,95 +443,95 @@ char *line_editor_read(void)
         }
         else if (c == ctrl_key('a')) // Check for Ctrl+A (move cursor to beginning of line)
         {
-            cursor_position = 0; // Move cursor to the beginning of the line
-            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+            ed.cursor_position = 0; // Move cursor to the beginning of the line
+            redraw_line(&ed); // Redraw the line with the updated cursor position
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('e')) // Check for Ctrl+E (move cursor to end of line)
         {
-            cursor_position = length; // Move cursor to the end of the line
-            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated cursor position
+            ed.cursor_position = ed.length; // Move cursor to the end of the line
+            redraw_line(&ed); // Redraw the line with the updated cursor position
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('l')) // Check for Ctrl+L (clear screen)
         {
             printf("\033[H\033[J"); // ANSI escape code to clear the screen and move cursor to home position
-            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            redraw_line(&ed); // Redraw the line with the updated cursor position
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('u')) // Check for Ctrl+U (clear line)
         {
-            length = 0; // Clear the input line
-            cursor_position = 0; // Move cursor to the beginning of the line
-            buffer[0] = '\0'; // Null-terminate the string
-            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            ed.length = 0; // Clear the input line
+            ed.cursor_position = 0; // Move cursor to the beginning of the line
+            ed.buffer[0] = '\0'; // Null-terminate the string
+            redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('k')) // Check for Ctrl+K (delete from cursor to end of line)
         {
-            buffer[cursor_position] = '\0'; // Null-terminate the string at the cursor position
-            length = cursor_position; // Update the length of the input line
-            redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+            ed.buffer[ed.cursor_position] = '\0'; // Null-terminate the string at the cursor position
+            ed.length = ed.cursor_position; // Update the length of the input line
+            redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('b')) // Check for Ctrl+B (move cursor left)
         {
-            move_cursor_left(&cursor_position); // Move the cursor left
+            move_cursor_left(&ed); // Move the cursor left
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('f')) // Check for Ctrl+F (move cursor right)
         {
-            move_cursor_right(&cursor_position, length); // Move the cursor right
+            move_cursor_right(&ed, ed.length); // Move the cursor right
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('p')) // Check for Ctrl+P (previous command in history)
         {
             const char *prev_command = history_previous(); // Get the previous command from history
-            handle_up_down(prev_command, &length, &cursor_position, buffer, buffer_size); // Handle the previous command
+            handle_up_down(&ed, prev_command); // Handle the previous command
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('n')) // Check for Ctrl+N (next command in history)
         {
             const char *next_command = history_next(); // Get the next command from history
-            handle_up_down(next_command, &length, &cursor_position, buffer, buffer_size); // Handle the next command
+            handle_up_down(&ed, next_command); // Handle the next command
             completion_reset(); // Reset the completion state
         }
         else if (c == ctrl_key('w')) // Check for Ctrl+W (delete word before cursor)
         {
-            if (cursor_position > 0) // Ensure there is a word to delete
+            if (ed.cursor_position > 0) // Ensure there is a word to delete
             {
-                size_t new_cursor_position = cursor_position;
-                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] == ' ') // Skip spaces
+                size_t new_cursor_position = ed.cursor_position;
+                while (new_cursor_position > 0 && ed.buffer[new_cursor_position - 1] == ' ') // Skip spaces
                     new_cursor_position--;
                 
-                while (new_cursor_position > 0 && buffer[new_cursor_position - 1] != ' ') // Find start of word
+                while (new_cursor_position > 0 && ed.buffer[new_cursor_position - 1] != ' ') // Find start of word
                     new_cursor_position--;
 
-                memmove(buffer + new_cursor_position, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the left (+1 includes null terminator)
-                length -= (cursor_position - new_cursor_position); // Update length of input line
-                cursor_position = new_cursor_position; // Update cursor position
+                memmove(ed.buffer + new_cursor_position, ed.buffer + ed.cursor_position, ed.length - ed.cursor_position + 1); // Shift characters after cursor to the left (+1 includes null terminator)
+                ed.length -= (ed.cursor_position - new_cursor_position); // Update length of input line
+                ed.cursor_position = new_cursor_position; // Update cursor position
 
-                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+                redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
             }
         }
         else if (c == ctrl_key('t')) // Check for Ctrl+T (transpose characters)
         {
-            if (cursor_position > 0 && cursor_position < length) // Ensure there are characters to transpose
+            if (ed.cursor_position > 0 && ed.cursor_position < ed.length) // Ensure there are characters to transpose
             {
-                char temp = buffer[cursor_position - 1]; // Store the character before the cursor
-                buffer[cursor_position - 1] = buffer[cursor_position]; // Swap with the character at the cursor
-                buffer[cursor_position] = temp; // Complete the swap
+                char temp = ed.buffer[ed.cursor_position - 1]; // Store the character before the cursor
+                ed.buffer[ed.cursor_position - 1] = ed.buffer[ed.cursor_position]; // Swap with the character at the cursor
+                ed.buffer[ed.cursor_position] = temp; // Complete the swap
 
-                cursor_position++; // Move the cursor to the right after transposing
-                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+                ed.cursor_position++; // Move the cursor to the right after transposing
+                redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
             }
-            else if (cursor_position == length && length > 1) // If cursor is at the end, transpose the last two characters
+            else if (ed.cursor_position == ed.length && ed.length > 1) // If cursor is at the end, transpose the last two characters
             {
-                char temp = buffer[length - 2]; // Store the second last character
-                buffer[length - 2] = buffer[length - 1]; // Swap with the last character
-                buffer[length - 1] = temp; // Complete the swap
+                char temp = ed.buffer[ed.length - 2]; // Store the second last character
+                ed.buffer[ed.length - 2] = ed.buffer[ed.length - 1]; // Swap with the last character
+                ed.buffer[ed.length - 1] = temp; // Complete the swap
 
-                redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+                redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
             }
         }
         // else if (c == ctrl_key('r')) // Check for Ctrl+R (reverse search in history)
@@ -485,11 +539,11 @@ char *line_editor_read(void)
         //     const char *search_result = history_reverse_search(); // Get the result of the reverse search from history
         //     if (search_result != NULL) // Check if a matching command was found
         //     {
-        //         snprintf(buffer, buffer_size, "%s", search_result); // Copy the matching command into the buffer
-        //         length = strlen(buffer); // Update the length of the input line
-        //         cursor_position = length; // Move cursor to the end of the line
+        //         snprintf(ed.buffer, ed.buffer_size, "%s", search_result); // Copy the matching command into the buffer
+        //         ed.length = strlen(ed.buffer); // Update the length of the input line
+        //         ed.cursor_position = ed.length; // Move cursor to the end of the line
 
-        //         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+        //         redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
         //     }
         // }
         // else if (c == ctrl_key('y')) // Check for Ctrl+Y (paste last deleted text)
@@ -498,25 +552,25 @@ char *line_editor_read(void)
         //     if (last_deleted != NULL) // Check if there is any deleted text to paste
         //     {
         //         size_t last_deleted_length = strlen(last_deleted); // Get the length of the last deleted text
-        //         if (length + last_deleted_length >= buffer_size) // Check if buffer needs to be resized
+        //         if (ed.length + last_deleted_length >= buffer_size) // Check if buffer needs to be resized
         //         {
-        //             buffer_size = length + last_deleted_length + 1; // Update buffer size to accommodate the new text
-        //             char *new_buffer = realloc(buffer, buffer_size); // Reallocate memory
+        //             buffer_size = ed.length + last_deleted_length + 1; // Update buffer size to accommodate the new text
+        //             char *new_buffer = realloc(ed.buffer, buffer_size); // Reallocate memory
         //             if (new_buffer == NULL) // Check for memory allocation failure
         //             {
         //                 fprintf(stderr, "Memory allocation failed\n");
-        //                 free(buffer); // Free the old buffer to prevent memory leak
+        //                 free(ed.buffer); // Free the old buffer to prevent memory leak
         //                 return NULL; // Return NULL to indicate failure
         //             }
-        //             buffer = new_buffer; // Update the buffer pointer to the new buffer
+        //             ed.buffer = new_buffer; // Update the buffer pointer to the new buffer
         //         }
 
-        //         memmove(buffer + cursor_position + last_deleted_length, buffer + cursor_position, length - cursor_position + 1); // Shift characters after cursor to the right (+1 includes null terminator)
-        //         memcpy(buffer + cursor_position, last_deleted, last_deleted_length); // Insert the last deleted text at the cursor position
-        //         length += last_deleted_length; // Update length of input line
-        //         cursor_position += last_deleted_length; // Move cursor position to the right after pasting
+        //         memmove(ed.buffer + ed.cursor_position + last_deleted_length, ed.buffer + ed.cursor_position, ed.length - ed.cursor_position + 1); // Shift characters after cursor to the right (+1 includes null terminator)
+        //         memcpy(ed.buffer + ed.cursor_position, last_deleted, last_deleted_length); // Insert the last deleted text at the cursor position
+        //         ed.length += last_deleted_length; // Update length of input line
+        //         ed.cursor_position += last_deleted_length; // Move cursor position to the right after pasting
 
-        //         redraw_line(buffer, length, cursor_position); // Redraw the line with the updated buffer and cursor position
+        //         redraw_line(&ed); // Redraw the line with the updated buffer and cursor position
         //     }
         // }
     }
@@ -527,5 +581,5 @@ char *line_editor_read(void)
     // newline after the user presses Enter
     putchar('\n');
 
-    return buffer; // Return the dynamically allocated input line
+    return ed.buffer; // Return the dynamically allocated input line
 }

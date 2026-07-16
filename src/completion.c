@@ -463,17 +463,15 @@ static void print_matches(char matches[][256], int match_count)
  * Completes the current word in the input buffer based on the cursor position.
  *
  * Parameters:
- *   buffer - The input buffer containing the line of text.
- *   length - Pointer to the current length of the input line.
- *   cursor_position - Pointer to the current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  *   match_func - Pointer to the function used to find matching commands/filenames.
  */
-static void complete_matches(char *buffer, size_t *length, size_t *cursor_position, int (*match_func)(const char *, char [][256], size_t *))
+static void complete_matches(LineEditor *ed, int (*match_func)(const char *, char [][256], size_t *))
 {
     char word[256]; // Buffer to hold the current word
     size_t word_length;
 
-    get_current_word(buffer, *cursor_position, word, &word_length); // Extract the current word based on cursor position
+    get_current_word(ed->buffer, ed->cursor_position, word, &word_length); // Extract the current word based on cursor position
 
     char matches[MAX_MATCHES][256]; // Buffer to hold the matching words
     int match_count = match_func(word, matches, &word_length); // Find matching words
@@ -484,7 +482,7 @@ static void complete_matches(char *buffer, size_t *length, size_t *cursor_positi
     {        
         print_matches(matches, match_count); // Print the matching words in a formatted manner
 
-        redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+        redraw_line(ed); // Redraw the line with the updated buffer and cursor position
     }
     else // If this is the first tab press or the prefix has changed
     {
@@ -493,14 +491,14 @@ static void complete_matches(char *buffer, size_t *length, size_t *cursor_positi
         {
             size_t extra_length = lcp - word_length; // Calculate the length of the extra characters to insert
         
-            memcpy(buffer + *cursor_position, matches[0] + word_length, extra_length); // Insert the matching command into the buffer
+            memcpy(ed->buffer + ed->cursor_position, matches[0] + word_length, extra_length); // Insert the matching command into the buffer
         
-            *cursor_position += extra_length; // Update the cursor position
-            *length += extra_length; // Update the length of the input line
+            ed->cursor_position += extra_length; // Update the cursor position
+            ed->length += extra_length; // Update the length of the input line
         
-            buffer[*length] = '\0'; // Null-terminate the string
+            ed->buffer[ed->length] = '\0'; // Null-terminate the string
         
-            redraw_line(buffer, *length, *cursor_position); // Redraw the line with the updated buffer and cursor position
+            redraw_line(ed); // Redraw the line with the updated buffer and cursor position
         }
         else // If the longest common prefix is not longer than the current word, just set the previous_was_tab flag and store the last prefix
         {
@@ -538,25 +536,28 @@ static char *complete_line(const char *buffer, size_t cursor_position)
  * Handles tab completion for the input buffer.
  *
  * Parameters:
- *   buffer          - The input buffer containing the line of text.
- *   length          - Pointer to the current length of the input line.
- *   cursor_position - Pointer to the current cursor position in the input line.
+ *   ed - Pointer to the LineEditor instance containing the buffer, prompt, and cursor position.
  */
-void tab_complete(char *buffer, size_t *length, size_t *cursor_position)
+void tab_complete(LineEditor *ed)
 {
-    char *current_word = complete_line(buffer, *cursor_position); // Get the current word based on cursor position
+    char *current_word = complete_line(ed->buffer, ed->cursor_position); // Get the current word based on cursor position
 
-    if (is_command_position(buffer, *cursor_position))
+    if (is_command_position(ed->buffer, ed->cursor_position))
     {
         if (strchr(current_word, '/') != NULL) // If the current word contains a '/', look for executables
-            complete_matches(buffer, length, cursor_position, find_executable_matches);
+            complete_matches(ed, find_executable_matches);
         else // Otherwise, treat it as a command
-            complete_matches(buffer, length, cursor_position, find_command_matches);
+            complete_matches(ed, find_command_matches);
     }
     else
-        complete_matches(buffer, length, cursor_position, find_filename_matches);
+        complete_matches(ed, find_filename_matches);
 }
 
+/**
+ * Function: completion_reset
+ * --------------------------
+ * Resets the completion state.
+ */
 void completion_reset(void)
 {
     previous_was_tab = 0; // Reset the flag for tab completion

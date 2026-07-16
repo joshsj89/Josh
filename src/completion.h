@@ -2,10 +2,9 @@
 #define COMPLETION_H
 
 #include <stddef.h> // For size_t
+#include "line_editor.h"
 
-void redraw_line(const char *buffer, size_t length, size_t cursor_position);
-
-void tab_complete(char *buffer, size_t *length, size_t *cursor_position);
+void tab_complete(LineEditor *ed);
 void completion_reset(void);
 
 #endif /* COMPLETION_H */
