@@ -23,9 +23,6 @@
 #include "line_editor.h"
 #include "prompt.h"
 
-static const char *left_arrow = "\033[D";  // ANSI escape code for left arrow
-static const char *right_arrow = "\033[C"; // ANSI escape code for right arrow
-
 /* Structure to hold original terminal settings */
 struct termios orig_termios;
 
@@ -218,9 +215,8 @@ static void move_cursor_left(LineEditor *ed)
 {
     if (ed->cursor_position > 0) // Ensure the cursor is not at the beginning
     {
-        printf("%s", left_arrow); // Move cursor left
-        fflush(stdout); // Flush the output buffer to ensure immediate display
         ed->cursor_position--; // Decrease the cursor position
+        redraw_line(ed); // Redraw the line with the updated cursor position
     }
 }
 
@@ -240,9 +236,8 @@ static void move_cursor_right(LineEditor *ed, size_t length)
 {
     if (ed->cursor_position < length) // Ensure the cursor is not at the end
     {
-        printf("%s", right_arrow); // Move cursor right
-        fflush(stdout); // Flush the output buffer to ensure immediate display
         ed->cursor_position++; // Increase the cursor position
+        redraw_line(ed); // Redraw the line with the updated cursor position
     }
 }
 
