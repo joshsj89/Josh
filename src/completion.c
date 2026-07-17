@@ -490,7 +490,27 @@ static void complete_matches(LineEditor *ed, int (*match_func)(const char *, cha
         if (lcp > word_length) // If the longest common prefix is longer than the current word, insert the extra characters
         {
             size_t extra_length = lcp - word_length; // Calculate the length of the extra characters to insert
+
+            // Check if buffer has enough space to accommodate the extra characters
+            if (ed->length + extra_length >= ed->buffer_size)
+            {
+                // Resize the buffer if necessary
+                size_t new_size = ed->buffer_size * 2;
+                while (new_size <= ed->length + extra_length)
+                    new_size *= 2;
+
+                char *new_buffer = realloc(ed->buffer, new_size);
+                if (new_buffer == NULL)
+                    return;
+
+                ed->buffer = new_buffer;
+                ed->buffer_size = new_size;
+            }
+
+            // Shift the existing characters to the right to make space for the new characters
+            memmove(ed->buffer + ed->cursor_position + extra_length, ed->buffer + ed->cursor_position, ed->length - ed->cursor_position + 1); // +1 to include the null terminator
         
+            // Insert the extra matching segment into the new gap
             memcpy(ed->buffer + ed->cursor_position, matches[0] + word_length, extra_length); // Insert the matching command into the buffer
         
             ed->cursor_position += extra_length; // Update the cursor position
