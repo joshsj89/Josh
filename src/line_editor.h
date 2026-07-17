@@ -12,6 +12,10 @@ typedef struct LineEditor
     size_t cursor_position; // Current cursor position in the input line
 
     size_t prompt_start_col; // Column position where the prompt starts
+
+    size_t prompt_length; // Visible length of the prompt string (excluding ANSI escape codes)
+    size_t term_cols; // Number of terminal columns (width of the terminal)
+    size_t last_cursor_row; // Last known cursor row position (0-indexed)
 } LineEditor;
 
 void redraw_line(LineEditor *ed);

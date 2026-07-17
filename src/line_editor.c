@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 #include "completion.h"
@@ -136,12 +137,22 @@ int get_cursor_position(size_t *row, size_t *col)
  */
 void redraw_line(LineEditor *ed)
 {
-    // Clear the current line
+    // Update terminal width dynamically in case the terminal size changes during input
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0)
+        ed->term_cols = w.ws_col;
+    size_t cols = ed->term_cols;
+
+    // Move cursor up by the number of rows the input line occupies
+    if (ed->last_cursor_row > 0)
+        printf("\033[%zuA", ed->last_cursor_row);
+
+    // Move cursor to prompt start column
     printf("\r"); // Move cursor back to the beginning of the line
     if (ed->prompt_start_col > 1)
         printf("\033[%zuC", ed->prompt_start_col - 1); // Move cursor to the prompt's start column
 
-    printf("\033[K"); // ANSI escape code to clear from cursor to the end of the line
+    printf("\033[J"); // ANSI escape code to clear from cursor to the bottom of the screen
 
     // Print the prompt
     fputs(ed->prompt, stdout);
@@ -149,9 +160,20 @@ void redraw_line(LineEditor *ed)
     // Print the buffer content
     fwrite(ed->buffer, 1, ed->length, stdout);
 
-    // Move the cursor to the correct position
-    for (size_t i = ed->length; i > ed->cursor_position; i--)
-        fputs(left_arrow, stdout); // Move cursor left to the desired position
+    // Calculate the new cursor position in terms of rows and columns
+    size_t cursor_idx = (ed->prompt_start_col - 1) + ed->prompt_length + ed->cursor_position;
+    size_t target_row = cursor_idx / cols;
+    size_t target_col = cursor_idx % cols;
+
+    size_t total_idx = (ed->prompt_start_col - 1) + ed->prompt_length + ed->length;
+    size_t total_rows = total_idx / cols;
+
+    // Move cursor to the correct row
+    if (total_rows > target_row)
+        printf("\033[%zuA", total_rows - target_row); // Move cursor up to the target row
+    printf("\033[%zuG", target_col + 1); // Move cursor to the target column (1-indexed)
+
+    ed->last_cursor_row = target_row; // Update the last known cursor row position
 
     fflush(stdout); // Flush the output buffer to ensure immediate display
 }
@@ -337,8 +359,14 @@ char *line_editor_read(void)
     // Enable raw mode for terminal input
     enable_raw_mode();
 
+    // Get current terminal width
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    ed.term_cols = w.ws_col > 0 ? w.ws_col : 80; // Store the number of terminal columns
+
+    // Query cursor position before printing prompt
     size_t row, col;
-    if (get_cursor_position(&row, &col) == -1) // Get the current cursor position
+    if (get_cursor_position(&row, &col) == -1)
     {
         fprintf(stderr, "Failed to get cursor position\n");
         free(ed.buffer); // Free the allocated buffer to prevent memory leak
@@ -350,6 +378,20 @@ char *line_editor_read(void)
 
     fputs(ed.prompt, stdout);
     fflush(stdout);
+
+    // Query cursor position after printing prompt
+    size_t after_row, after_col;
+    if (get_cursor_position(&after_row, &after_col) == 0)
+    {
+        if (after_row > row)
+            ed.prompt_length = (ed.term_cols - col + 1) + (after_row - row - 1) * ed.term_cols + (after_col - 1);
+        else
+            ed.prompt_length = after_col - col;
+    }
+    else
+    {
+        ed.prompt_length = 15; // Fallback length
+    }
 
     // Read characters from standard input
     ed.length = 0; // Current length of the input line
