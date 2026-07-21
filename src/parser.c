@@ -619,6 +619,7 @@ Command *parse_line(char *line)
 
     command->argv = malloc(bufsize * sizeof(Token)); // Allocate memory for the array of token strings
     command->argc = 0; // Initialize the argument count to 0
+    command->background = false;
     Token token;
 
     if (!command->argv)
@@ -645,6 +646,28 @@ Command *parse_line(char *line)
         }
 
         tokenize_line(NULL, &token); // Continue tokenizing the input line
+    }
+
+    // Check if the last token is a background operator
+    if (command->argc > 0)
+    {
+        for (size_t i = 0; i < command->argc; i++)
+        {
+            if (command->argv[i].type == TOKEN_BACKGROUND)
+            {
+                if (i != command->argc - 1) // If '&' is not the last token, it's a syntax error
+                {
+                    fprintf(stderr, "Syntax Error: '&' must be at the end of the command\n");
+                    free_command(command);
+                    return NULL;
+                }
+
+                command->background = true; // Mark the command to be executed in the background
+                free_token(&command->argv[i]); // Free the '&' token
+                command->argc--; // Decrease the argument count
+                break;
+            }
+        }
     }
 
     return command;

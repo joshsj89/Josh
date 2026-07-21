@@ -64,6 +64,8 @@ typedef struct
 {
     Token *argv; // Array of tokens representing the command and its arguments
     size_t argc; // Number of tokens in argv
+
+    bool background; // Indicates if the command should be executed in the background (e.g., with &)
 } Command;
 
 void token_init(Token *token);

@@ -53,6 +53,8 @@ void shell_loop(void)
     int running = 1; // Flag to control the shell loop
     while (running)
     {
+        reap_background_jobs(); // Check for any completed background jobs
+
         char *line = line_editor_read();
 
         if (line == NULL) // Exit the loop on EOF or error
@@ -64,6 +66,12 @@ void shell_loop(void)
         history_add(line); // Add the line to command history
 
         Command *cmd = parse_line(line); // Parse the input line into a command
+
+        if (cmd == NULL) // Check for parsing errors
+        {
+            free(line); // Free the memory allocated by line_editor_read
+            continue; // Skip to the next iteration of the loop
+        }
 
         expand_variables(cmd); // Expand any variables in the command
 

@@ -23,6 +23,26 @@
 #define MAX_COMMANDS 64 // Maximum number of commands in a pipeline
 
 /*
+ * Function: reap_background_jobs
+ * -------------------------------
+ * Checks for any completed background jobs and prints their status.
+ */
+void reap_background_jobs(void)
+{
+    int status;
+    pid_t pid;
+
+    // Use a non-blocking wait to check for any finished background jobs
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status)) // Check if the child process exited normally
+            printf("[%d] Done (exit status: %d)\n", pid, WEXITSTATUS(status));
+        else if (WIFSIGNALED(status)) // Check if the child process was terminated by a signal
+            printf("[%d] Terminated by signal %d\n", pid, WTERMSIG(status));
+    }
+}
+
+/*
  * Function: is_redirection
  * -------------------------
  * Checks if a token represents a redirection operator.
@@ -230,13 +250,14 @@ size_t split_commands(Command *input, Command *commands)
  * Parameters:
  *   cmds - A pointer to an array of Command structures representing the commands in the pipeline
  *   num_cmds - The number of commands in the pipeline
+ *   background - A boolean indicating whether the pipeline should be executed in the background
  * 
  * Note:
  *   This function creates a new process for each command in the pipeline, sets up the necessary
  *   pipes for inter-process communication, and waits for all child processes to finish.
  * 
  */
-static void execute_pipeline(Command *cmds, size_t num_cmds)
+static void execute_pipeline(Command *cmds, size_t num_cmds, bool background)
 {
     int in_fd = 0; // Start with standard input
     int fd[2];
@@ -287,9 +308,10 @@ static void execute_pipeline(Command *cmds, size_t num_cmds)
         }
     }
 
-    // Wait for all child processes to finish
-    for (size_t i = 0; i < num_cmds; i++)
-        wait(NULL);
+    // Wait for all child processes to finish if not running in the background
+    if (!background)
+        for (size_t i = 0; i < num_cmds; i++)
+            wait(NULL);
 }
 
 /*
@@ -320,7 +342,7 @@ int execute_command(Command *cmd)
     size_t num_commands = split_commands(cmd, commands); // Count the number of commands in the pipeline
     if (num_commands > 1) // If there are multiple commands, execute as a pipeline
     {
-        execute_pipeline(commands, num_commands);
+        execute_pipeline(commands, num_commands, cmd->background);
         return 0;
     }
 
@@ -343,9 +365,13 @@ int execute_command(Command *cmd)
     }
     else // parent process
     {
-        // In the parent process, wait for the child process to finish execution
-        int status;
-        waitpid(pid, &status, 0);
+        if (!cmd->background) // If the command is not to be run in the background, wait for it to finish
+        {
+            int status;
+            waitpid(pid, &status, 0); // Wait for the child process to finish execution
+        }
+        else
+            printf("[%d]\n", pid); // Print the PID of the background process
     }
 
     return 0;
