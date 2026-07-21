@@ -5,7 +5,7 @@
  * which is responsible for executing commands with their respective arguments.
  * 
  * TODO:
- * - Implement support for background jobs (&).
+ * - Implement support for non-trailing background jobs (&).
  */
 
 #include <errno.h>
