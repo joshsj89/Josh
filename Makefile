@@ -10,7 +10,8 @@ SRC = src/main.c \
 		src/line_editor.c \
 		src/completion.c \
 		src/expand.c \
-		src/prompt.c
+		src/prompt.c \
+		src/jobs.c
 
 OBJ = $(SRC:.c=.o)
 

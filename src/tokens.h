@@ -66,6 +66,8 @@ typedef struct
     size_t argc; // Number of tokens in argv
 
     bool background; // Indicates if the command should be executed in the background (e.g., with &)
+
+    char *command_line; // The original command line string from which the tokens were parsed
 } Command;
 
 void token_init(Token *token);

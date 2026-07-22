@@ -620,6 +620,7 @@ Command *parse_line(char *line)
     command->argv = malloc(bufsize * sizeof(Token)); // Allocate memory for the array of token strings
     command->argc = 0; // Initialize the argument count to 0
     command->background = false;
+    command->command_line = strdup(line); // Store the original command line for later use
     Token token;
 
     if (!command->argv)
@@ -733,6 +734,8 @@ void free_command(Command *cmd)
     free_tokens(cmd->argv, cmd->argc); // Free the tokens and their associated memory
     free(cmd->argv); // Free the array of token pointers
     cmd->argv = NULL;
+    free(cmd->command_line); // Free the original command line string
+    cmd->command_line = NULL;
     free(cmd); // Free the Command structure itself
     cmd = NULL;
 }

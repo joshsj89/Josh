@@ -18,29 +18,10 @@
 #include <unistd.h> // for fork, execvp
 #include "builtins.h"
 #include "execute.h"
+#include "jobs.h"
 #include "tokens.h"
 
 #define MAX_COMMANDS 64 // Maximum number of commands in a pipeline
-
-/*
- * Function: reap_background_jobs
- * -------------------------------
- * Checks for any completed background jobs and prints their status.
- */
-void reap_background_jobs(void)
-{
-    int status;
-    pid_t pid;
-
-    // Use a non-blocking wait to check for any finished background jobs
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-    {
-        if (WIFEXITED(status)) // Check if the child process exited normally
-            printf("[%d] Done (exit status: %d)\n", pid, WEXITSTATUS(status));
-        else if (WIFSIGNALED(status)) // Check if the child process was terminated by a signal
-            printf("[%d] Terminated by signal %d\n", pid, WTERMSIG(status));
-    }
-}
 
 /*
  * Function: is_redirection
@@ -371,7 +352,12 @@ int execute_command(Command *cmd)
             waitpid(pid, &status, 0); // Wait for the child process to finish execution
         }
         else
-            printf("[%d]\n", pid); // Print the PID of the background process
+        {
+            Job *job = add_job(pid, cmd->command_line); // Add the background job to the job table
+
+            if (job != NULL)
+                printf("[%d] %d\n", job->id, job->pgid); // Print the ID and PID of the background process
+        }
     }
 
     return 0;
