@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h> // for chdir
 #include "builtins.h"
+#include "jobs.h"
 #include "history.h"
 
 /*
@@ -82,6 +83,14 @@ static int shell_exit(Command *cmd)
     return -1; // Return -1 to indicate that the shell should exit
 }
 
+static int shell_jobs(Command *cmd)
+{
+    (void)cmd; // Unused parameter
+
+    print_jobs(); // Call the function to print the list of jobs
+    return 1; // Return 1 to indicate that the shell should continue running
+}
+
 /*
  * execute_builtin - Execute a built-in command
  * 
@@ -109,6 +118,8 @@ int execute_builtin(Command *cmd)
         history_print();
         return 1; // Indicate that the command was executed successfully
     }
+    else if (strcmp(cmd->argv[0].full_text, "jobs") == 0)
+        return shell_jobs(cmd);
 
     return 0; // Command is not a built-in
 }
