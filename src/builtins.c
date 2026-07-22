@@ -21,9 +21,10 @@
  *
  * Returns:
  *   1 if the command was executed successfully
+ *   0 if the command failed to execute
  * 
  */
-int shell_cd(Command *cmd)
+static int shell_cd(Command *cmd)
 {
     char oldpwd[PATH_MAX];
     char cwd[PATH_MAX];
@@ -75,7 +76,7 @@ int shell_cd(Command *cmd)
  * Returns:
  *   -1 to indicate that the shell should exit
  */
-int shell_exit(Command *cmd)
+static int shell_exit(Command *cmd)
 {
     (void)cmd; // Unused parameter
     return -1; // Return -1 to indicate that the shell should exit
