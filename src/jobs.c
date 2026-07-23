@@ -168,7 +168,7 @@ void print_jobs(void)
                 state = "Running";
                 break;
             case JOB_STOPPED:
-                state = "Stopped";
+                state = "Terminated";
                 break;
             case JOB_DONE:
                 state = "Done";
@@ -205,14 +205,18 @@ void reap_background_jobs(void)
         if (job == NULL)
             continue;
 
-        job->state = JOB_DONE;
-
+            
         if (WIFEXITED(status)) // Check if the child process exited normally
+        {
             printf("[%d] Done\t%s\n", job->id, job->command);
+            job->state = JOB_DONE;
+        }
         else if (WIFSIGNALED(status)) // Check if the child process was terminated by a signal
-            printf("[%d] Terminated by signal %d\n", job->id, WTERMSIG(status));
+        {
+            // printf("[%d] Terminated by signal %d\n", job->id, WTERMSIG(status));
+            job->state = JOB_STOPPED;
+        }
 
-        job->state = JOB_DONE;
         job->notified = false;
     }
 }
