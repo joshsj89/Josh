@@ -180,11 +180,8 @@ void print_jobs(void)
 
         printf("[%d] %-10s %s\n", jobs[i].id, state, jobs[i].command);
 
-        if (jobs[i].state == JOB_DONE && !jobs[i].notified)
-        {
-            jobs[i].notified = true; // Mark the job as notified
+        if (jobs[i].state != JOB_RUNNING)
             remove_job(&jobs[i]); // Remove the job from the job table
-        }
     }
 }
 
@@ -205,18 +202,14 @@ void reap_background_jobs(void)
         if (job == NULL)
             continue;
 
-            
-        if (WIFEXITED(status)) // Check if the child process exited normally
-        {
-            printf("[%d] Done\t%s\n", job->id, job->command);
-            job->state = JOB_DONE;
-        }
-        else if (WIFSIGNALED(status)) // Check if the child process was terminated by a signal
-        {
-            // printf("[%d] Terminated by signal %d\n", job->id, WTERMSIG(status));
-            job->state = JOB_STOPPED;
-        }
+        job->live_processes--; // Decrement the count of live processes in the job
 
-        job->notified = false;
+        if (job->live_processes == 0) // If all processes in the job have finished
+        {
+            if (WIFEXITED(status)) // Check if the child process exited normally
+                job->state = JOB_DONE;
+            else if (WIFSIGNALED(status)) // Check if the child process was terminated by a signal
+                job->state = JOB_STOPPED;
+        }
     }
 }

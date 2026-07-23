@@ -87,6 +87,7 @@ static int shell_jobs(Command *cmd)
 {
     (void)cmd; // Unused parameter
 
+    reap_background_jobs(); // Reap any completed background jobs
     print_jobs(); // Call the function to print the list of jobs
     return 1; // Return 1 to indicate that the shell should continue running
 }
