@@ -207,6 +207,7 @@ size_t split_commands(Command *input, Command *commands)
         {
             commands[count].argv = &input->argv[start];
             commands[count].argc = i - start;
+            commands[count].command_line = input->command_line; // Preserve the original command line
             count++;
             start = i + 1; // Move start to the next token after the pipe
         }
@@ -217,6 +218,7 @@ size_t split_commands(Command *input, Command *commands)
     {
         commands[count].argv = &input->argv[start];
         commands[count].argc = input->argc - start;
+        commands[count].command_line = input->command_line; // Preserve the original command line
         count++;
     }
 
@@ -243,6 +245,9 @@ static void execute_pipeline(Command *cmds, size_t num_cmds, bool background)
     int in_fd = 0; // Start with standard input
     int fd[2];
 
+    pid_t pgid = 0; // Process group ID for the pipeline
+    Job *job = NULL; // Pointer to the job structure for background jobs
+
     for (size_t i = 0; i < num_cmds; i++)
     {
         if (i < num_cmds - 1) // If not the last command, create a pipe
@@ -262,6 +267,11 @@ static void execute_pipeline(Command *cmds, size_t num_cmds, bool background)
         }
         else if (pid == 0) // Child process
         {
+            if (pgid == 0) // Set the process group ID for the first child
+                pgid = getpid();
+            
+            setpgid(0, pgid); // Set the process group ID for all children
+            
             if (in_fd != 0) // If not the first command, redirect input
             {
                 dup2(in_fd, STDIN_FILENO);
@@ -279,6 +289,22 @@ static void execute_pipeline(Command *cmds, size_t num_cmds, bool background)
         }
         else // Parent process
         {
+            if (pgid == 0) // Set the process group ID for the first child
+            {
+                pgid = pid;
+                setpgid(pid, pgid); // Set the process group ID for the child
+
+                if (background)
+                {
+                    job = add_job(pgid, cmds[0].command_line); // Add the background job to the job table
+
+                    if (job != NULL)
+                        job->live_processes = num_cmds; // Set the number of live processes in the job
+                }
+            }
+            else
+                setpgid(pid, pgid); // Set the process group ID for the child
+
             if (in_fd != 0)
                 close(in_fd); // Close the previous read end
 
@@ -286,13 +312,20 @@ static void execute_pipeline(Command *cmds, size_t num_cmds, bool background)
                 close(fd[1]); // Close the write end of the pipe in the parent
 
             in_fd = fd[0]; // Save the read end for the next command
+
+            if (job != NULL)
+                job->pids[job->process_count++] = pid; // Add the child PID to the job's process list
         }
     }
 
     // Wait for all child processes to finish if not running in the background
     if (!background)
-        for (size_t i = 0; i < num_cmds; i++)
-            wait(NULL);
+    {
+        int status;
+        while (waitpid(-pgid, &status, 0) > 0); // Wait for all processes in the process group
+    }
+    else
+        printf("[%d] %d\n", job->id, job->pgid);
 }
 
 /*
@@ -342,10 +375,14 @@ int execute_command(Command *cmd)
     }
     else if (pid == 0) // child process
     {
+        setpgid(0, 0); // Set the process group ID of the child to its own PID
+        
         execute_child(cmd); // Execute the command in the child process
     }
     else // parent process
     {
+        setpgid(pid, pid); // Set the process group ID of the child to its own PID
+        
         if (!cmd->background) // If the command is not to be run in the background, wait for it to finish
         {
             int status;
@@ -353,10 +390,15 @@ int execute_command(Command *cmd)
         }
         else
         {
-            Job *job = add_job(pid, cmd->command_line); // Add the background job to the job table
+            pid_t pgid = pid; // Get the process group ID of the background job
+            Job *job = add_job(pgid, cmd->command_line); // Add the background job to the job table
 
             if (job != NULL)
+            {
+                job->pids[job->process_count++] = pid; // Add the child PID to the job's process list
+                job->live_processes = 1; // Set the number of live processes in the job
                 printf("[%d] %d\n", job->id, job->pgid); // Print the ID and PID of the background process
+            }
         }
     }
 

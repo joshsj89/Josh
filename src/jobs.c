@@ -32,8 +32,6 @@ Job *add_job(pid_t pgid, const char *command)
     {
         if (!jobs[i].active)
         {
-            jobs[i].active = true;
-
             jobs[i].id = next_job_id++;
             jobs[i].pgid = pgid;
 
@@ -41,6 +39,10 @@ Job *add_job(pid_t pgid, const char *command)
 
             jobs[i].command = strdup(command);
 
+            jobs[i].process_count = 0; // Initialize process count to 0
+            jobs[i].live_processes = 0; // Initialize live process count to 0
+
+            jobs[i].active = true;
             jobs[i].notified = false;
 
             return &jobs[i];
@@ -68,6 +70,32 @@ Job *find_job_by_id(int id)
         if (jobs[i].active && jobs[i].id == id)
             return &jobs[i];
 
+    return NULL;
+}
+
+/*
+ *  Function: find_job_by_pid
+ *  ------------------------
+ *  Finds a job by its PID.
+ *
+ *  Parameters:
+ *   - pid: The PID of the job to find.
+ *
+ *  Returns:
+ *   - A pointer to the Job structure if found, or NULL if not found.
+ */
+Job *find_job_by_pid(pid_t pid)
+{
+    for (int i = 0; i < MAX_JOBS; i++)
+    {
+        if (!jobs[i].active)
+            continue;
+            
+        for (int j = 0; j < jobs[i].process_count; j++)
+            if (jobs[i].pids[j] == pid)
+                return &jobs[i];
+    }
+    
     return NULL;
 }
 
@@ -108,12 +136,15 @@ void remove_job(Job *job)
     free(job->command);
     job->command = NULL;
 
-    job->active = false;
-
     job->id = 0;
     job->pgid = 0;
 
     job->state = JOB_DONE;
+
+    job->process_count = 0;
+    job->live_processes = 0;
+
+    job->active = false;
     job->notified = false;
 }
 
@@ -147,7 +178,13 @@ void print_jobs(void)
                 break;
         }
 
-        printf("[%d] %-8s %s\n", jobs[i].id, state, jobs[i].command);
+        printf("[%d] %-10s %s\n", jobs[i].id, state, jobs[i].command);
+
+        if (jobs[i].state == JOB_DONE && !jobs[i].notified)
+        {
+            jobs[i].notified = true; // Mark the job as notified
+            remove_job(&jobs[i]); // Remove the job from the job table
+        }
     }
 }
 
@@ -164,7 +201,7 @@ void reap_background_jobs(void)
     // Use a non-blocking wait to check for any finished background jobs
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
     {
-        Job *job = find_job_by_pgid(pid);
+        Job *job = find_job_by_pid(pid);
         if (job == NULL)
             continue;
 
@@ -175,6 +212,7 @@ void reap_background_jobs(void)
         else if (WIFSIGNALED(status)) // Check if the child process was terminated by a signal
             printf("[%d] Terminated by signal %d\n", job->id, WTERMSIG(status));
 
-        remove_job(job); // Remove the job from the job table
+        job->state = JOB_DONE;
+        job->notified = false;
     }
 }

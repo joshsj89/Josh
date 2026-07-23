@@ -12,6 +12,7 @@
 #include "execute.h"
 #include "expand.h"
 #include "history.h"
+#include "jobs.h"
 #include "line_editor.h"
 #include "parser.h"
 #include "prompt.h"
