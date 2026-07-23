@@ -29,7 +29,6 @@ typedef struct
     int live_processes; // Number of live processes in the job
 
     bool active; // Indicates if the job slot is currently in use
-    bool notified; // Indicates if the user has been notified about the job's state change
 } Job;
 
 extern Job jobs[MAX_JOBS]; // Array to hold the jobs

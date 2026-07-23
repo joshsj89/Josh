@@ -43,7 +43,6 @@ Job *add_job(pid_t pgid, const char *command)
             jobs[i].live_processes = 0; // Initialize live process count to 0
 
             jobs[i].active = true;
-            jobs[i].notified = false;
 
             return &jobs[i];
         }
@@ -145,7 +144,6 @@ void remove_job(Job *job)
     job->live_processes = 0;
 
     job->active = false;
-    job->notified = false;
 }
 
 /**
@@ -180,7 +178,7 @@ void print_jobs(void)
 
         printf("[%d] %-10s %s\n", jobs[i].id, state, jobs[i].command);
 
-        if (jobs[i].state != JOB_RUNNING)
+        if (jobs[i].state == JOB_DONE || jobs[i].state == JOB_STOPPED)
             remove_job(&jobs[i]); // Remove the job from the job table
     }
 }
